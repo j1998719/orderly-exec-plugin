@@ -54,7 +54,9 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
     try {
       const res = await placeTicket({
         exchange: "orderly",
-        symbol: `${base}-${quote}`, // BASE-QUOTE (executor parses leniently)
+        // Orderly-native symbol (e.g. "PERP_ETH_USDC") — matches the server's
+        // instrument cache (GET /v1/public/info) and the executor's parser.
+        symbol: symbol ?? `PERP_${base}_${quote}`,
         target_position,
         time_constraint_ms: style === "MARKET" ? 0 : timeoutMs,
         strategy, // MAKER / TAKER hint for the execution engine
