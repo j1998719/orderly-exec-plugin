@@ -15,6 +15,7 @@
  * that owns all hook usage.
  */
 import * as React from "react";
+import type { OrderlyPlugin } from "@orderly.network/plugin-core";
 
 import { BlockfillOrderPanel } from "./OrderForm";
 
@@ -25,7 +26,7 @@ const ORDER_ENTRY_TARGET = "Trading.OrderEntry.SubmitSection";
  * Returns the plugin descriptor consumed by `OrderlyAppProvider`'s `plugins` prop.
  * `id` must equal `pluginId` in `.orderly-manifest.json`.
  */
-export function registerBlockfillExec() {
+export function registerBlockfillExec(): OrderlyPlugin {
   return {
     name: "Blockfill Execution",
     id: "blockfill-exec",
