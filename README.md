@@ -45,15 +45,23 @@ order form (this plugin)  ──POST placeTicket──▶  blockfill-server (Exe
 | `src/api.ts` | `placeTicket()` — blockfill-server client |
 | `.orderly-manifest.json` | marketplace submission manifest |
 
-## Status / TODO (skeleton)
+## Build
 
+```bash
+npm install --legacy-peer-deps   # Orderly SDK pulls react-dom@19 as a transitive peer
+npm run build                    # tsc → dist/
+```
+
+## Status / TODO
+
+- [x] Typed against the real `@orderly.network/plugin-core` `OrderlyPlugin` type;
+      `npm run build` produces `dist/` cleanly (interceptor `(Original, props, api)`
+      shape confirmed against SDK v3.1.5).
 - [ ] Wire live symbol/position/holding from `@orderly.network/hooks` (`usePositionStream`,
       `useHoldingStream`) — currently assumes a flat starting position.
 - [ ] Replace the static `X-API-Key` with a short-lived **session token** (wallet-signed
       challenge → `POST /execution/v1/auth/session`) — see spec §7.
-- [ ] Confirm exact `@orderly.network/plugin-core` `registerPlugin` / interceptor API and
-      `api`/`props` context shape against the installed SDK version.
 - [ ] Add `strategy` (Maker/Taker) to the server ticket schema (spec §5), or map it to a
       strategy config on the executor.
-- [ ] `pnpm install && pnpm build`; scaffold parity-check against `orderly-devkit create plugin`.
-- [ ] Est. liq price / fees wiring.
+- [ ] Preview live in a host DEX (`OrderlyAppProvider plugins={[registerBlockfillExec()]}`)
+      on testnet; est. liq price / fees wiring.
