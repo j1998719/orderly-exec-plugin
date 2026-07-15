@@ -15,7 +15,7 @@ export type Strategy = "MAKER" | "TAKER";
 
 export interface PlaceTicketParams {
   exchange: "orderly";
-  /** BASE-QUOTE, e.g. "ETH-USDC" (executor parses leniently). */
+  /** Orderly-native symbol, e.g. "PERP_ETH_USDC" (matches the server instrument cache). */
   symbol: string;
   /** Absolute target position (executor computes the delta to trade). */
   target_position: number;
