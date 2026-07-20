@@ -1,4 +1,4 @@
-# @blockfill/orderly-exec-plugin
+# @j1998719/orderly-exec-plugin
 
 Blockfill execution module for the **Orderly Network Module Marketplace** — a
 DEX-installed plugin that adds a **TWAP / Maker–Taker order-entry panel** and routes
@@ -18,7 +18,7 @@ in `blockfill/specs/orderly-module.md` (§7 frontend, §11 marketplace).
 ## How a DEX installs it
 
 ```tsx
-import { registerBlockfillExec } from "@blockfill/orderly-exec-plugin";
+import { registerBlockfillExec } from "@j1998719/orderly-exec-plugin";
 
 <OrderlyAppProvider brokerId="…" plugins={[registerBlockfillExec()]}>
   …
