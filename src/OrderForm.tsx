@@ -5,6 +5,7 @@
  * This IS a real React component (hooks allowed), rendered by the interceptor.
  */
 import * as React from "react";
+import { usePositionStream, useCollateral } from "@orderly.network/hooks";
 
 import { placeTicket, type Strategy } from "./api";
 
@@ -35,12 +36,19 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   const [strategy, setStrategy] = React.useState<Strategy>("MAKER");
   const [status, setStatus] = React.useState<string>("");
 
-  // TODO(orderly): read live account/position from @orderly.network/hooks
-  //   const { data: positions } = usePositionStream();  // current position for this symbol
-  //   const { data: holding }   = useHoldingStream();    // available USDC ("Available")
-  // Until wired, target_position assumes a flat starting position.
-  const currentPosition = 0;
-  const available = 0;
+  // Orderly-native symbol for this market (e.g. "PERP_ETH_USDC").
+  const orderlySymbol = symbol ?? `PERP_${base}_${quote}`;
+
+  // Live account state from the Orderly SDK (the panel is rendered inside
+  // OrderlyAppProvider, so these stream hooks are in-context).
+  //  - current signed position for this symbol → target_position is computed as
+  //    an ABSOLUTE target off the real starting position, not a flat assumption.
+  //  - free collateral → the "Available" figure shown under Buy/Sell.
+  const [positionInfo] = usePositionStream(orderlySymbol);
+  const currentPosition =
+    positionInfo?.rows?.find((r) => r.symbol === orderlySymbol)?.position_qty ?? 0;
+  const { freeCollateral } = useCollateral();
+  const available = freeCollateral ?? 0;
 
   async function onSubmit() {
     const size = Number(qty);
@@ -56,7 +64,7 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
         exchange: "orderly",
         // Orderly-native symbol (e.g. "PERP_ETH_USDC") — matches the server's
         // instrument cache (GET /v1/public/info) and the executor's parser.
-        symbol: symbol ?? `PERP_${base}_${quote}`,
+        symbol: orderlySymbol,
         target_position,
         time_constraint_ms: style === "MARKET" ? 0 : timeoutMs,
         strategy, // MAKER / TAKER hint for the execution engine
@@ -89,7 +97,7 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       </div>
 
       <div className="oui-text-xs oui-text-base-contrast-54">
-        Available: {available} {quote}
+        Available: {available.toFixed(2)} {quote}
       </div>
 
       {/* Quantity (base) */}
