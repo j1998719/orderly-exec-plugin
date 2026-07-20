@@ -5,9 +5,9 @@
  * This IS a real React component (hooks allowed), rendered by the interceptor.
  */
 import * as React from "react";
-import { usePositionStream, useCollateral } from "@orderly.network/hooks";
+import { usePositionStream, useCollateral, useAccount, useConfig } from "@orderly.network/hooks";
 
-import { placeTicket, type Strategy } from "./api.js";
+import { placeTicket, getSession, type Strategy } from "./api.js";
 
 type OrderStyle = "LIMIT" | "MARKET" | "TWAP";
 type Side = "BUY" | "SELL";
@@ -50,6 +50,14 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   const { freeCollateral } = useCollateral();
   const available = freeCollateral ?? 0;
 
+  // Authenticated trader identity from the Orderly SDK session. The wallet
+  // ADDRESS drives our own session auth (challenge → sign → Bearer token); the
+  // order then executes on THIS trader's account, not a hardcoded one.
+  const { account, state } = useAccount();
+  const brokerId = useConfig<string>("brokerId");
+  const address: string | undefined =
+    (state as any)?.address ?? (account as any)?.address;
+
   async function onSubmit() {
     const size = Number(qty);
     if (!Number.isFinite(size) || size <= 0) {
@@ -58,18 +66,26 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
     }
     // Ticket target is ABSOLUTE (executor computes the delta to trade).
     const target_position = currentPosition + (side === "BUY" ? size : -size);
-    setStatus("Placing…");
+    const ticket = {
+      exchange: "orderly" as const,
+      // Orderly-native symbol (e.g. "PERP_ETH_USDC") — matches the server's
+      // instrument cache (GET /v1/public/info) and the executor's parser.
+      symbol: orderlySymbol,
+      target_position,
+      time_constraint_ms: style === "MARKET" ? 0 : timeoutMs,
+      strategy, // MAKER / TAKER hint for the execution engine
+    };
     try {
-      const res = await placeTicket({
-        exchange: "orderly",
-        // Orderly-native symbol (e.g. "PERP_ETH_USDC") — matches the server's
-        // instrument cache (GET /v1/public/info) and the executor's parser.
-        symbol: orderlySymbol,
-        target_position,
-        time_constraint_ms: style === "MARKET" ? 0 : timeoutMs,
-        strategy, // MAKER / TAKER hint for the execution engine
-        // TODO(auth): replace with a short-lived session token (see spec §7 Screen 4).
-      });
+      // Real auth: establish a wallet-signature session (one signature prompt),
+      // so the order executes on THIS connected trader's account. If no wallet
+      // address is available (local/demo harness), fall back to the static key.
+      let session;
+      if (address && brokerId) {
+        setStatus("Sign in your wallet to authorize…");
+        session = await getSession(brokerId, address);
+      }
+      setStatus("Placing…");
+      const res = await placeTicket(ticket, session);
       setStatus(`Ticket placed: ${res.ticket_id}`);
     } catch (e: any) {
       setStatus(`Failed: ${e?.message ?? e}`);
