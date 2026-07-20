@@ -1,7 +1,7 @@
 {
   "npmName": "@blockfill/orderly-exec-plugin",
   "pluginId": "blockfill-exec",
-  "repoUrl": "https://github.com/blockfill/orderly-exec-plugin",
+  "repoUrl": "https://github.com/j1998719/orderly-exec-plugin",
   "tags": ["Order Entry", "Trading", "Tool"],
   "usagePrompt": "Blockfill execution module. Adds a TWAP / Maker-Taker order-entry panel to the order form that routes orders to the blockfill execution engine (smart order execution over Orderly). Install: add this package to your app and pass registerBlockfillExec() to OrderlyAppProvider's `plugins` prop. Config: set globalThis.BLOCKFILL_SERVER_URL to the blockfill-server endpoint; the plugin auto-detects the active symbol and account from the Orderly SDK context. No broker configuration required.",
   "coverImages": [],
