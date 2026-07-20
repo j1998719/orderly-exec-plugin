@@ -7,9 +7,15 @@
  * rather than a static API key embedded in public page JS.
  */
 
-/** blockfill-server base URL (configure per deployment). */
-const BLOCKFILL_SERVER_URL =
-  (globalThis as any).BLOCKFILL_SERVER_URL ?? "https://exec.blockfill.example";
+/**
+ * blockfill-server base URL (configure per deployment via
+ * `globalThis.BLOCKFILL_SERVER_URL`). Resolved at CALL time — not module-load —
+ * because the host page usually sets the global after this module is first
+ * evaluated (ESM imports run before the host's setup code).
+ */
+function blockfillServerUrl(): string {
+  return (globalThis as any).BLOCKFILL_SERVER_URL ?? "https://exec.blockfill.example";
+}
 
 export type Strategy = "MAKER" | "TAKER";
 
@@ -44,7 +50,7 @@ export async function placeTicket(
   });
 
   const res = await fetch(
-    `${BLOCKFILL_SERVER_URL}/execution/v1/tickets/placeTicket?${qs.toString()}`,
+    `${blockfillServerUrl()}/execution/v1/tickets/placeTicket?${qs.toString()}`,
     {
       method: "POST",
       headers: {
