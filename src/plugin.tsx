@@ -3,7 +3,7 @@
  *
  * A DEX installs this plugin into its `OrderlyAppProvider`:
  *
- *   import { registerBlockfillExec } from "@blockfill/orderly-exec-plugin";
+ *   import { registerBlockfillExec } from "@j1998719/orderly-exec-plugin";
  *   <OrderlyAppProvider plugins={[registerBlockfillExec()]} ... />
  *
  * It injects a custom TWAP/Maker order-entry panel at the order-entry submit slot;

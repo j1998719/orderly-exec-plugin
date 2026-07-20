@@ -1,5 +1,5 @@
 {
-  "npmName": "@blockfill/orderly-exec-plugin",
+  "npmName": "@j1998719/orderly-exec-plugin",
   "pluginId": "blockfill-exec",
   "repoUrl": "https://github.com/j1998719/orderly-exec-plugin",
   "tags": ["Order Entry", "Trading", "Tool"],
