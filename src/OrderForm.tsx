@@ -7,7 +7,7 @@
 import * as React from "react";
 import { usePositionStream, useCollateral } from "@orderly.network/hooks";
 
-import { placeTicket, type Strategy } from "./api";
+import { placeTicket, type Strategy } from "./api.js";
 
 type OrderStyle = "LIMIT" | "MARKET" | "TWAP";
 type Side = "BUY" | "SELL";
