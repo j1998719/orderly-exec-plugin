@@ -64,6 +64,60 @@ export async function getSession(brokerId: string, address: string): Promise<Ses
   return session;
 }
 
+/** Sign EIP-712 typed data with the connected wallet (eth_signTypedData_v4). */
+async function signTypedDataV4(address: string, typedData: unknown): Promise<string> {
+  const eth = (globalThis as any).ethereum;
+  if (!eth?.request) throw new Error("no injected wallet available to sign");
+  return await eth.request({
+    method: "eth_signTypedData_v4",
+    params: [address, JSON.stringify(typedData)],
+  });
+}
+
+/** The wallet's current chain id (decimal). Drives testnet vs mainnet Orderly. */
+async function walletChainId(): Promise<number> {
+  const eth = (globalThis as any).ethereum;
+  const hex: string = await eth.request({ method: "eth_chainId" });
+  return parseInt(hex, 16);
+}
+
+/** Whether this session's account already has a live delegated key on the executor. */
+export async function isOnboarded(session: Session): Promise<boolean> {
+  const res = await fetch(`${blockfillServerUrl()}/execution/v1/onboard/status`, {
+    headers: { Authorization: `Bearer ${session.token}` },
+  });
+  if (!res.ok) return false;
+  return ((await res.json()) as { onboarded?: boolean }).onboarded === true;
+}
+
+/**
+ * One-time delegated-key onboarding: the trader signs an AddOrderlyKey EIP-712
+ * so the executor can trade their account. Prompts one `eth_signTypedData_v4`.
+ * The executor hot-onboards the account within ~60s afterwards.
+ */
+export async function onboard(session: Session, brokerId: string, address: string): Promise<void> {
+  const base = blockfillServerUrl();
+  const chain_id = await walletChainId();
+  const auth = { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` };
+
+  const prep = await fetch(`${base}/execution/v1/onboard/prepare`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ wallet_address: address, broker_id: brokerId, chain_id }),
+  });
+  if (!prep.ok) throw new Error(`onboard/prepare ${prep.status}: ${await prep.text()}`);
+  const { typed_data } = (await prep.json()) as { typed_data: unknown };
+
+  const signature = await signTypedDataV4(address, typed_data);
+
+  const comp = await fetch(`${base}/execution/v1/onboard/complete`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ signature }),
+  });
+  if (!comp.ok) throw new Error(`onboard/complete ${comp.status}: ${await comp.text()}`);
+}
+
 export interface PlaceTicketParams {
   exchange: "orderly";
   /** Orderly-native symbol, e.g. "PERP_ETH_USDC" (matches the server instrument cache). */
