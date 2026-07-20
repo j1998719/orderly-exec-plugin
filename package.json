@@ -1,12 +1,14 @@
 {
   "name": "@j1998719/orderly-exec-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Blockfill execution module for Orderly Network — TWAP/Maker order entry that routes to the blockfill execution engine.",
   "type": "module",
   "main": "dist/plugin.js",
   "module": "dist/plugin.js",
   "types": "dist/plugin.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"

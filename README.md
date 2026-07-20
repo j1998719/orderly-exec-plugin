@@ -57,8 +57,11 @@ npm run build                    # tsc → dist/
 - [x] Typed against the real `@orderly.network/plugin-core` `OrderlyPlugin` type;
       `npm run build` produces `dist/` cleanly (interceptor `(Original, props, api)`
       shape confirmed against SDK v3.1.5).
-- [ ] Wire live symbol/position/holding from `@orderly.network/hooks` (`usePositionStream`,
-      `useHoldingStream`) — currently assumes a flat starting position.
+- [x] Wire live symbol/position/holding from `@orderly.network/hooks`
+      (`usePositionStream` → current `position_qty` for the symbol; `useCollateral` →
+      free collateral for "Available"). `target_position` is now computed off the real
+      starting position, not a flat assumption. (Type-checked against SDK v3.1.5;
+      pending live verification in a host DEX.)
 - [ ] Replace the static `X-API-Key` with a short-lived **session token** (wallet-signed
       challenge → `POST /execution/v1/auth/session`) — see spec §7.
 - [ ] Add `strategy` (Maker/Taker) to the server ticket schema (spec §5), or map it to a
