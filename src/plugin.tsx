@@ -17,7 +17,7 @@
 import * as React from "react";
 import type { OrderlyPlugin } from "@orderly.network/plugin-core";
 
-import { BlockfillOrderPanel } from "./OrderForm";
+import { BlockfillOrderPanel } from "./OrderForm.js";
 
 /** Runtime injector target for the order-entry submit area. */
 const ORDER_ENTRY_TARGET = "Trading.OrderEntry.SubmitSection";
