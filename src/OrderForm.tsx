@@ -7,7 +7,7 @@
 import * as React from "react";
 import { usePositionStream, useCollateral, useAccount, useConfig } from "@orderly.network/hooks";
 
-import { placeTicket, getSession, type Strategy } from "./api.js";
+import { placeTicket, getSession, isOnboarded, onboard, type Strategy } from "./api.js";
 
 type OrderStyle = "LIMIT" | "MARKET" | "TWAP";
 type Side = "BUY" | "SELL";
@@ -83,6 +83,12 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       if (address && brokerId) {
         setStatus("Sign in your wallet to authorize…");
         session = await getSession(brokerId, address);
+        // First time on this DEX: delegate a trading key so the executor can
+        // trade this account (one extra signature; hot-onboards within ~60s).
+        if (!(await isOnboarded(session))) {
+          setStatus("Enabling smart execution — sign to delegate…");
+          await onboard(session, brokerId, address);
+        }
       }
       setStatus("Placing…");
       const res = await placeTicket(ticket, session);
