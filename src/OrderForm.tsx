@@ -36,40 +36,6 @@ function splitSymbol(sym?: string): { base: string; quote: string } {
   return { base: parts[1] ?? "ETH", quote: parts[2] ?? "USDC" };
 }
 
-/**
- * The order-form body for our TWAP type: just a quantity, since TWAP has no
- * price to set. The value is written into the host's own order store, so the
- * submit section (a separate slot) and the host's validation read the same
- * quantity the trader typed.
- */
-export function BlockfillTwapBody({ symbol }: { symbol?: string }) {
-  const { base } = splitSymbol(symbol);
-  const entry = useOrderStore((s: any) => s.entry);
-  const actions = useOrderStore((s: any) => s.actions);
-  const qty: string = entry?.order_quantity ?? "";
-
-  return (
-    <div className="oui-flex oui-flex-col oui-gap-2">
-      <label className="oui-flex oui-flex-col oui-text-xs oui-gap-1">
-        Quantity
-        <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
-          <input
-            className="oui-flex-1 oui-bg-transparent oui-outline-none"
-            inputMode="decimal"
-            value={qty}
-            onChange={(e) => actions?.updateOrderByKey?.("order_quantity", e.target.value)}
-            placeholder="0"
-          />
-          <span className="oui-text-base-contrast-54">{base}</span>
-        </div>
-      </label>
-      <div className="oui-text-xs oui-text-base-contrast-36">
-        Executed over your chosen duration by the Blockfill engine.
-      </div>
-    </div>
-  );
-}
-
 export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: any }) {
   const { base, quote } = splitSymbol(symbol);
 
@@ -77,9 +43,11 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   const [strategy, setStrategy] = React.useState<Strategy>("MAKER");
   const [status, setStatus] = React.useState<string>("");
 
-  // The host's live order form: the trader's Buy/Sell and quantity come from
-  // there, so there is a single set of inputs on screen.
+  // The host's live order form. Side still comes from its Buy/Sell switch, and
+  // the quantity is written back into the same store, so the host's slider and
+  // validation stay in sync with what is typed here.
   const entry = useOrderStore((s: any) => s.entry);
+  const actions = useOrderStore((s: any) => s.actions);
   const side: "BUY" | "SELL" = entry?.side === "SELL" ? "SELL" : "BUY";
   const qty: string = entry?.order_quantity ?? "";
 
@@ -168,11 +136,25 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
 
   return (
     <div className="oui-flex oui-flex-col oui-gap-2 oui-p-2 oui-rounded-lg oui-bg-base-8">
-      {/* Side and quantity come from the host's order form above — this panel
-          only adds what TWAP itself needs. */}
       <div className="oui-text-xs oui-text-base-contrast-54">
         Available: {available.toFixed(2)} {quote}
       </div>
+
+      {/* Quantity. TWAP has no price, so this is the only order input we need;
+          Buy/Sell still comes from the host's own switch above. */}
+      <label className="oui-flex oui-flex-col oui-text-xs oui-gap-1">
+        Quantity
+        <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
+          <input
+            className="oui-flex-1 oui-bg-transparent oui-outline-none"
+            inputMode="decimal"
+            value={qty}
+            onChange={(e) => actions?.updateOrderByKey?.("order_quantity", e.target.value)}
+            placeholder="0"
+          />
+          <span className="oui-text-base-contrast-54">{base}</span>
+        </div>
+      </label>
 
       {/* Execution window */}
       <div className="oui-flex oui-flex-col oui-gap-1">

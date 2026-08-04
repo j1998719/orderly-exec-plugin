@@ -18,14 +18,13 @@
 import * as React from "react";
 import type { OrderlyPlugin } from "@orderly.network/plugin-core";
 
-import { BlockfillOrderPanel, BlockfillTwapBody } from "./OrderForm.js";
-import { TWAP_TYPE_ID, setActiveCustomTypeId, useIsTwapSelected } from "./mode.js";
+import { BlockfillOrderPanel } from "./OrderForm.js";
+import { TWAP_TYPE_ID } from "./mode.js";
 
 /** Runtime injector targets (see @orderly.network/ui-order-entry). */
 const ADVANCED_SELECT_TARGET = "Trading.OrderEntry.AdvancedSelect";
 const MOBILE_TYPE_SELECT_TARGET = "Trading.OrderEntry.MobileTypeSelect";
 const BODY_TARGET = "Trading.OrderEntry.Body";
-const SUBMIT_SECTION_TARGET = "Trading.OrderEntry.SubmitSection";
 
 const TWAP_OPTION = { value: TWAP_TYPE_ID, label: "TWAP" };
 
@@ -43,35 +42,20 @@ function withTwapOption(Original: React.ComponentType<any>, props: any) {
     <Original
       {...props}
       items={[...items, TWAP_OPTION]}
-      onValueChange={(value: string) => {
-        setActiveCustomTypeId(value === TWAP_TYPE_ID ? TWAP_TYPE_ID : null);
-        props?.onValueChange?.(value);
-      }}
+      onValueChange={(value: string) => props?.onValueChange?.(value)}
     />
   );
 }
 
 /**
- * The order form body: ours while TWAP is selected, the host's otherwise. This
- * slot receives the authoritative `selectedCustomTypeId`, so it also keeps the
- * shared selection in sync (e.g. when the host resets to Limit on its own).
+ * The order form body: the whole TWAP form while our type is selected, the
+ * host's own body otherwise.
+ *
+ * Everything TWAP needs lives here — quantity, duration, maker/taker and the
+ * submit — because the host does not render its submit section for a custom
+ * order type, so a plugin's body has to be self-contained.
  */
 function OrderEntryBody({
-  Original,
-  props,
-}: {
-  Original: React.ComponentType<any>;
-  props: any;
-}) {
-  const selected: string | null = props?.selectedCustomTypeId ?? null;
-  React.useEffect(() => setActiveCustomTypeId(selected), [selected]);
-
-  if (selected !== TWAP_TYPE_ID) return <Original {...props} />;
-  return <BlockfillTwapBody symbol={props?.symbol} />;
-}
-
-/** The submit area: our TWAP submit while selected, the host's otherwise. */
-function SubmitSection({
   Original,
   props,
   api,
@@ -80,14 +64,10 @@ function SubmitSection({
   props: any;
   api: any;
 }) {
-  const twap = useIsTwapSelected();
-  if (!twap) return <Original {...props} />;
-  return (
-    <BlockfillOrderPanel
-      symbol={props?.assetInfo?.symbol ?? api?.symbol}
-      api={api}
-    />
-  );
+  if ((props?.selectedCustomTypeId ?? null) !== TWAP_TYPE_ID) {
+    return <Original {...props} />;
+  }
+  return <BlockfillOrderPanel symbol={props?.symbol} api={api} />;
 }
 
 /**
@@ -111,14 +91,8 @@ export function registerBlockfillExec(): OrderlyPlugin {
       },
       {
         target: BODY_TARGET,
-        component: (Original: React.ComponentType<any>, props: any) => (
-          <OrderEntryBody Original={Original} props={props} />
-        ),
-      },
-      {
-        target: SUBMIT_SECTION_TARGET,
         component: (Original: React.ComponentType<any>, props: any, api: any) => (
-          <SubmitSection Original={Original} props={props} api={api} />
+          <OrderEntryBody Original={Original} props={props} api={api} />
         ),
       },
     ],
