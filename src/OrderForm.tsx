@@ -105,12 +105,12 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       // address is available (local/demo harness), fall back to the static key.
       let session;
       if (address && brokerId && walletProvider) {
+        if (!chainId) throw new Error("wallet chain unavailable");
         setStatus("Sign in your wallet to authorize…");
-        session = await getSession(brokerId, address, walletProvider);
+        session = await getSession(brokerId, address, chainId, walletProvider);
         // First time on this DEX: delegate a trading key so the executor can
         // trade this account (one extra signature; hot-onboards within ~60s).
         if (!(await isOnboarded(session))) {
-          if (!chainId) throw new Error("wallet chain unavailable");
           setStatus("Enabling smart execution — sign to delegate…");
           await onboard(session, brokerId, address, chainId, walletProvider);
         }

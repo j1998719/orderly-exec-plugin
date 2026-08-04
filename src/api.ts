@@ -51,6 +51,7 @@ const sessionCache = new Map<string, Session>();
 export async function getSession(
   brokerId: string,
   address: string,
+  chainId: number,
   provider: WalletProvider,
 ): Promise<Session> {
   const key = `${brokerId}:${address.toLowerCase()}`;
@@ -58,7 +59,10 @@ export async function getSession(
   if (cached && cached.expires_at - Date.now() > 60_000) return cached;
 
   const base = blockfillServerUrl();
-  const chRes = await fetch(`${base}/execution/v1/auth/challenge`);
+  // The challenge is a SIWE (EIP-4361) message naming this wallet, chain and the
+  // site's origin, so the wallet can show the trader exactly what they authorize.
+  const q = new URLSearchParams({ address, chain_id: String(chainId) });
+  const chRes = await fetch(`${base}/execution/v1/auth/challenge?${q}`);
   if (!chRes.ok) throw new Error(`auth/challenge ${chRes.status}`);
   const challenge = (await chRes.json()) as { nonce: string; message: string };
 
