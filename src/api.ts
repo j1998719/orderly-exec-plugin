@@ -162,7 +162,11 @@ export interface TicketProgress {
   init_position: number;
   executed_position: number;
   status: string;
-  /** Set once the execution window has elapsed; `status` can still read OPEN. */
+  /**
+   * Set once the execution window has elapsed. The engine keeps working the
+   * ticket by design, so this does NOT mean the order is finished — only
+   * `status` reaching a terminal value does.
+   */
   is_expired?: boolean;
 }
 
@@ -199,9 +203,7 @@ export async function queryOpenTicket(
   );
   if (!res.ok) return null;
   const body = (await res.json()) as { tickets?: TicketProgress[] };
-  // The engine flags a timed-out ticket with is_expired while leaving status as
-  // OPEN, so filter those out rather than resuming a dead order.
-  return body.tickets?.find((t) => !t.is_expired) ?? null;
+  return body.tickets?.[0] ?? null;
 }
 
 /** Bearer session when we have one, else the static demo/local key. */

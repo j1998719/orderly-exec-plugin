@@ -180,7 +180,7 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       const p = await queryTicket(tracked.id, tracked.session).catch(() => null);
       if (cancelled || !p) return;
       setProgress(p);
-      if (["COMPLETE", "CANCEL", "EXPIRED"].includes(p.status) || p.is_expired) setTracked(null);
+      if (["COMPLETE", "CANCEL", "EXPIRED"].includes(p.status)) setTracked(null);
     };
     poll();
     const timer = setInterval(poll, 5000);
@@ -381,7 +381,12 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
             <span className="oui-text-base-contrast-54">
               {progress.ticket_id.slice(0, 12)}…
             </span>
-            <span>{progress.status}</span>
+            {/* Past its window but still working — the engine keeps a ticket
+                running after expiry, so say so rather than implying it stopped. */}
+            <span>
+              {progress.status}
+              {progress.is_expired && progress.status === "OPEN" ? " · past window" : ""}
+            </span>
           </div>
           {(() => {
             const total = Math.abs(progress.target_position - progress.init_position);
