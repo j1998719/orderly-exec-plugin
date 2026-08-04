@@ -141,6 +141,40 @@ export async function onboard(
   if (!comp.ok) throw new Error(`onboard/complete ${comp.status}: ${await comp.text()}`);
 }
 
+export interface TicketProgress {
+  ticket_id: string;
+  symbol: string;
+  target_position: number;
+  init_position: number;
+  executed_position: number;
+  status: string;
+}
+
+/** Fetch one ticket so the panel can show how far execution has got. */
+export async function queryTicket(
+  ticketId: string,
+  session?: Session,
+): Promise<TicketProgress | null> {
+  const qs = new URLSearchParams({ exchange: "orderly", ticket_id: ticketId });
+  const res = await fetch(
+    `${blockfillServerUrl()}/execution/v1/tickets/queryAllTickets?${qs}`,
+    { headers: authHeaders(session) },
+  );
+  if (!res.ok) return null;
+  const body = (await res.json()) as { tickets?: TicketProgress[] };
+  return body.tickets?.find((t) => t.ticket_id === ticketId) ?? null;
+}
+
+/** Bearer session when we have one, else the static demo/local key. */
+function authHeaders(session?: Session): Record<string, string> {
+  return session?.token
+    ? { Authorization: `Bearer ${session.token}` }
+    : {
+        "X-API-Key": (globalThis as any).BLOCKFILL_SESSION_TOKEN ?? "",
+        "X-User-Id": (globalThis as any).BLOCKFILL_USER_ID ?? "",
+      };
+}
+
 export interface PlaceTicketParams {
   exchange: "orderly";
   /** Orderly-native symbol, e.g. "PERP_ETH_USDC" (matches the server instrument cache). */
@@ -176,16 +210,9 @@ export async function placeTicket(
     ...(params.strategy ? { strategy: params.strategy } : {}),
   });
 
-  const headers: Record<string, string> = session?.token
-    ? { Authorization: `Bearer ${session.token}` }
-    : {
-        "X-API-Key": (globalThis as any).BLOCKFILL_SESSION_TOKEN ?? "",
-        "X-User-Id": (globalThis as any).BLOCKFILL_USER_ID ?? "",
-      };
-
   const res = await fetch(
     `${blockfillServerUrl()}/execution/v1/tickets/placeTicket?${qs.toString()}`,
-    { method: "POST", headers },
+    { method: "POST", headers: authHeaders(session) },
   );
 
   if (!res.ok) {

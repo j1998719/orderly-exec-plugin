@@ -25,6 +25,7 @@ import { TWAP_TYPE_ID } from "./mode.js";
 const ADVANCED_SELECT_TARGET = "Trading.OrderEntry.AdvancedSelect";
 const MOBILE_TYPE_SELECT_TARGET = "Trading.OrderEntry.MobileTypeSelect";
 const BODY_TARGET = "Trading.OrderEntry.Body";
+const BUY_SELL_SWITCH_TARGET = "Trading.OrderEntry.BuySellSwitch";
 
 const TWAP_OPTION = { value: TWAP_TYPE_ID, label: "TWAP" };
 
@@ -88,6 +89,15 @@ export function registerBlockfillExec(): OrderlyPlugin {
         target: MOBILE_TYPE_SELECT_TARGET,
         component: (Original: React.ComponentType<any>, props: any) =>
           withTwapOption(Original, props),
+      },
+      {
+        // Our body carries its own Buy/Sell, so hide the host's for this type
+        // rather than leaving two side controls that can disagree.
+        target: BUY_SELL_SWITCH_TARGET,
+        component: (Original: React.ComponentType<any>, props: any) =>
+          (props?.selectedCustomTypeId ?? null) === TWAP_TYPE_ID ? null : (
+            <Original {...props} />
+          ),
       },
       {
         target: BODY_TARGET,

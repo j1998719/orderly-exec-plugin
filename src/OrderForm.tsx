@@ -20,7 +20,16 @@ import {
 } from "@orderly.network/hooks";
 import { AccountStatusEnum } from "@orderly.network/types";
 
-import { placeTicket, getSession, isOnboarded, onboard, type Strategy } from "./api.js";
+import {
+  placeTicket,
+  getSession,
+  isOnboarded,
+  onboard,
+  queryTicket,
+  type Session,
+  type Strategy,
+  type TicketProgress,
+} from "./api.js";
 
 /** Duration presets → time_constraint in ms. */
 const TIMEOUT_PRESETS: Array<{ label: string; ms: number }> = [
@@ -42,13 +51,18 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   const [timeoutMs, setTimeoutMs] = React.useState<number>(TIMEOUT_PRESETS[1].ms);
   const [strategy, setStrategy] = React.useState<Strategy>("MAKER");
   const [status, setStatus] = React.useState<string>("");
+  const [tracked, setTracked] = React.useState<{ id: string; session?: Session } | null>(null);
+  const [progress, setProgress] = React.useState<TicketProgress | null>(null);
 
-  // The host's live order form. Side still comes from its Buy/Sell switch, and
-  // the quantity is written back into the same store, so the host's slider and
+  // Buy/Sell is owned here rather than read back from the host's switch: the
+  // submit button states the direction, and it must never be able to disagree
+  // with what we send. The host's own switch is hidden for this order type.
+  const [side, setSide] = React.useState<"BUY" | "SELL">("BUY");
+
+  // Quantity is written into the host's order store so its slider, max-qty and
   // validation stay in sync with what is typed here.
   const entry = useOrderStore((s: any) => s.entry);
   const actions = useOrderStore((s: any) => s.actions);
-  const side: "BUY" | "SELL" = entry?.side === "SELL" ? "SELL" : "BUY";
   const qty: string = entry?.order_quantity ?? "";
 
   // Orderly-native symbol for this market (e.g. "PERP_ETH_USDC").
@@ -85,6 +99,26 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   // ("Enable Trading"). Before that there is no account context: balances and
   // positions read 0, so a ticket would target a position we cannot see.
   const isTradingEnabled = state?.status === AccountStatusEnum.EnableTrading;
+
+  // Follow the ticket after it is placed: a TWAP fills over minutes, so without
+  // this the panel would go quiet and the trader could not tell whether their
+  // order was working or finished.
+  React.useEffect(() => {
+    if (!tracked) return;
+    let cancelled = false;
+    const poll = async () => {
+      const p = await queryTicket(tracked.id, tracked.session).catch(() => null);
+      if (cancelled || !p) return;
+      setProgress(p);
+      if (["COMPLETE", "CANCEL", "EXPIRED"].includes(p.status)) setTracked(null);
+    };
+    poll();
+    const timer = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [tracked]);
 
   async function onSubmit() {
     if (!isTradingEnabled) {
@@ -125,7 +159,9 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       }
       setStatus("Placing…");
       const res = await placeTicket(ticket, session);
-      setStatus(`Ticket placed: ${res.ticket_id}`);
+      setStatus("");
+      setProgress(null);
+      setTracked({ id: res.ticket_id, session });
     } catch (e: any) {
       setStatus(`Failed: ${e?.message ?? e}`);
     }
@@ -136,12 +172,32 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
 
   return (
     <div className="oui-flex oui-flex-col oui-gap-2 oui-p-2 oui-rounded-lg oui-bg-base-8">
+      {/* Buy / Sell — owned here so the submit button cannot state a direction
+          different from the one we send. */}
+      <div className="oui-grid oui-grid-cols-2 oui-gap-2">
+        <button
+          className={`oui-py-1 oui-rounded oui-text-sm ${
+            side === "BUY" ? "oui-bg-success oui-text-white" : "oui-bg-base-6"
+          }`}
+          onClick={() => setSide("BUY")}
+        >
+          Buy
+        </button>
+        <button
+          className={`oui-py-1 oui-rounded oui-text-sm ${
+            side === "SELL" ? "oui-bg-danger oui-text-white" : "oui-bg-base-6"
+          }`}
+          onClick={() => setSide("SELL")}
+        >
+          Sell
+        </button>
+      </div>
+
       <div className="oui-text-xs oui-text-base-contrast-54">
         Available: {available.toFixed(2)} {quote}
       </div>
 
-      {/* Quantity. TWAP has no price, so this is the only order input we need;
-          Buy/Sell still comes from the host's own switch above. */}
+      {/* Quantity. TWAP has no price, so this is the only order input we need. */}
       <label className="oui-flex oui-flex-col oui-text-xs oui-gap-1">
         Quantity
         <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
@@ -194,6 +250,36 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       </button>
 
       {status && <div className="oui-text-xs oui-text-base-contrast-54">{status}</div>}
+
+      {/* Live execution progress for the ticket we just placed. */}
+      {progress && (
+        <div className="oui-flex oui-flex-col oui-gap-1 oui-rounded oui-bg-base-7 oui-p-2 oui-text-xs">
+          <div className="oui-flex oui-justify-between">
+            <span className="oui-text-base-contrast-54">
+              {progress.ticket_id.slice(0, 12)}…
+            </span>
+            <span>{progress.status}</span>
+          </div>
+          {(() => {
+            const total = Math.abs(progress.target_position - progress.init_position);
+            const done = Math.abs(progress.executed_position);
+            const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+            return (
+              <>
+                <div className="oui-h-1 oui-w-full oui-rounded oui-bg-base-5">
+                  <div
+                    className="oui-h-1 oui-rounded oui-bg-primary"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="oui-text-base-contrast-54">
+                  Filled {done} / {total} {base} ({pct.toFixed(0)}%)
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }
