@@ -6,6 +6,7 @@
  */
 import * as React from "react";
 import { usePositionStream, useCollateral, useAccount, useConfig } from "@orderly.network/hooks";
+import { AccountStatusEnum } from "@orderly.network/types";
 
 import { placeTicket, getSession, isOnboarded, onboard, type Strategy } from "./api.js";
 
@@ -53,12 +54,20 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   // Authenticated trader identity from the Orderly SDK session. The wallet
   // ADDRESS drives our own session auth (challenge → sign → Bearer token); the
   // order then executes on THIS trader's account, not a hardcoded one.
-  const { account, state } = useAccount();
+  const { state } = useAccount();
   const brokerId = useConfig<string>("brokerId");
-  const address: string | undefined =
-    (state as any)?.address ?? (account as any)?.address;
+  const address = state?.address;
+
+  // Only allow submitting once the trader has completed Orderly's own login
+  // ("Enable Trading"). Before that there is no account context: balances and
+  // positions read 0, so a ticket would target a position we cannot see.
+  const isTradingEnabled = state?.status === AccountStatusEnum.EnableTrading;
 
   async function onSubmit() {
+    if (!isTradingEnabled) {
+      setStatus("Connect your wallet and enable trading first");
+      return;
+    }
     const size = Number(qty);
     if (!Number.isFinite(size) || size <= 0) {
       setStatus("Enter a valid quantity");
@@ -167,10 +176,19 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       </div>
 
       <button
-        className={`oui-mt-1 oui-py-2 oui-rounded oui-text-white ${side === "BUY" ? "oui-bg-success" : "oui-bg-danger"}`}
+        className={`oui-mt-1 oui-py-2 oui-rounded oui-text-white ${
+          !isTradingEnabled
+            ? "oui-bg-base-6 oui-cursor-not-allowed"
+            : side === "BUY"
+              ? "oui-bg-success"
+              : "oui-bg-danger"
+        }`}
         onClick={onSubmit}
+        disabled={!isTradingEnabled}
       >
-        {side === "BUY" ? "Buy" : "Sell"} {base} · {style}
+        {isTradingEnabled
+          ? `${side === "BUY" ? "Buy" : "Sell"} ${base} · ${style}`
+          : "Connect wallet to trade"}
       </button>
 
       {status && <div className="oui-text-xs oui-text-base-contrast-54">{status}</div>}
