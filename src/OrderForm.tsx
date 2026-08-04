@@ -17,6 +17,7 @@ import {
   useConfig,
   useWalletConnector,
   useOrderStore,
+  useSymbolInfo,
 } from "@orderly.network/hooks";
 import { AccountStatusEnum } from "@orderly.network/types";
 
@@ -40,14 +41,16 @@ const TIMEOUT_PRESETS: Array<{ label: string; ms: number }> = [
 ];
 
 /**
- * Format a quantity for display. Sizes are accumulated by repeated addition, so
- * they carry binary floating-point noise (0.0051 arrives as
- * 0.005099999999999993); round to the precision anyone actually trades in and
- * drop trailing zeros.
+ * Format a size for display at the market's own precision.
+ *
+ * Sizes are accumulated by repeated addition, so they carry binary
+ * floating-point noise (0.0051 arrives as 0.005099999999999993). `dp` is the
+ * instrument's `base_dp`, so we show exactly the precision it trades in rather
+ * than an arbitrary cutoff. Trailing zeros are dropped.
  */
-function formatQty(value: number): string {
+function formatQty(value: number, dp: number): string {
   if (!Number.isFinite(value)) return "0";
-  return String(Number(value.toFixed(6)));
+  return String(Number(value.toFixed(dp)));
 }
 
 /** "PERP_ETH_USDC" → { base: "ETH", quote: "USDC" }. */
@@ -78,6 +81,12 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
 
   // Orderly-native symbol for this market (e.g. "PERP_ETH_USDC").
   const orderlySymbol = symbol ?? `PERP_${base}_${quote}`;
+
+  // Display precision for this market: the exchange's own base decimal places
+  // (base_tick 0.0001 -> 4 dp for ETH), so sizes are not shown to a made-up
+  // precision the instrument does not trade in.
+  const symbolInfo = useSymbolInfo(orderlySymbol);
+  const baseDp: number = (symbolInfo?.("base_dp", 4) as number | undefined) ?? 4;
 
   // Live account state from the Orderly SDK (the panel is rendered inside
   // OrderlyAppProvider, so these stream hooks are in-context).
@@ -239,8 +248,8 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
           target, so state it before the trader commits. */}
       {Number(qty) > 0 && (
         <div className="oui-text-xs oui-text-base-contrast-54">
-          Position {formatQty(currentPosition)} →{" "}
-          {formatQty(currentPosition + (side === "BUY" ? Number(qty) : -Number(qty)))} {base}
+          Position {formatQty(currentPosition, baseDp)} →{" "}
+          {formatQty(currentPosition + (side === "BUY" ? Number(qty) : -Number(qty)), baseDp)} {base}
         </div>
       )}
 
@@ -293,13 +302,13 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
                   />
                 </div>
                 <div className="oui-text-base-contrast-54">
-                  Filled {formatQty(done)} / {formatQty(total)} {base} ({pct.toFixed(1)}%)
+                  Filled {formatQty(done, baseDp)} / {formatQty(total, baseDp)} {base} ({pct.toFixed(1)}%)
                 </div>
                 {/* A ticket targets an absolute position, so show where it is
                     heading — "sell 0.05" of a 0.5 position is not the same as
                     a target of 0.05, and only the target says which it is. */}
                 <div className="oui-text-base-contrast-36">
-                  {formatQty(progress.init_position)} → {formatQty(progress.target_position)} {base}
+                  {formatQty(progress.init_position, baseDp)} → {formatQty(progress.target_position, baseDp)} {base}
                 </div>
               </>
             );
