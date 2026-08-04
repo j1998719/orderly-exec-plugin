@@ -44,6 +44,20 @@ async function personalSign(
 
 const sessionCache = new Map<string, Session>();
 
+function sessionKey(brokerId: string, address: string): string {
+  return `${brokerId}:${address.toLowerCase()}`;
+}
+
+/**
+ * The cached session, if one is still valid. Unlike `getSession` this never
+ * asks the wallet to sign — use it for read-only calls, which must not pop a
+ * signature request.
+ */
+export function peekSession(brokerId: string, address: string): Session | undefined {
+  const cached = sessionCache.get(sessionKey(brokerId, address));
+  return cached && cached.expires_at - Date.now() > 60_000 ? cached : undefined;
+}
+
 /**
  * Establish (or reuse a cached) wallet-signature session for `address` under
  * `brokerId`. Prompts one wallet signature on first use / after expiry.
@@ -54,9 +68,9 @@ export async function getSession(
   chainId: number,
   provider: WalletProvider,
 ): Promise<Session> {
-  const key = `${brokerId}:${address.toLowerCase()}`;
-  const cached = sessionCache.get(key);
-  if (cached && cached.expires_at - Date.now() > 60_000) return cached;
+  const key = sessionKey(brokerId, address);
+  const cached = peekSession(brokerId, address);
+  if (cached) return cached;
 
   const base = blockfillServerUrl();
   // The challenge is a SIWE (EIP-4361) message naming this wallet, chain and the
@@ -148,6 +162,8 @@ export interface TicketProgress {
   init_position: number;
   executed_position: number;
   status: string;
+  /** Set once the execution window has elapsed; `status` can still read OPEN. */
+  is_expired?: boolean;
 }
 
 /** Fetch one ticket so the panel can show how far execution has got. */
@@ -163,6 +179,29 @@ export async function queryTicket(
   if (!res.ok) return null;
   const body = (await res.json()) as { tickets?: TicketProgress[] };
   return body.tickets?.find((t) => t.ticket_id === ticketId) ?? null;
+}
+
+/**
+ * The account's in-flight ticket for a symbol, if any.
+ *
+ * A TWAP keeps working after the page is closed, so on mount the panel asks
+ * whether one is already running rather than showing nothing until the trader
+ * places another.
+ */
+export async function queryOpenTicket(
+  symbol: string,
+  session?: Session,
+): Promise<TicketProgress | null> {
+  const qs = new URLSearchParams({ exchange: "orderly", symbol });
+  const res = await fetch(
+    `${blockfillServerUrl()}/execution/v1/tickets/queryOpenTickets?${qs}`,
+    { headers: authHeaders(session) },
+  );
+  if (!res.ok) return null;
+  const body = (await res.json()) as { tickets?: TicketProgress[] };
+  // The engine flags a timed-out ticket with is_expired while leaving status as
+  // OPEN, so filter those out rather than resuming a dead order.
+  return body.tickets?.find((t) => !t.is_expired) ?? null;
 }
 
 /** Bearer session when we have one, else the static demo/local key. */

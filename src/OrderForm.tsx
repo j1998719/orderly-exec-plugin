@@ -29,6 +29,8 @@ import {
   isOnboarded,
   onboard,
   queryTicket,
+  queryOpenTicket,
+  peekSession,
   type Session,
   type Strategy,
   type TicketProgress,
@@ -145,6 +147,29 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   // positions read 0, so a ticket would target a position we cannot see.
   const isTradingEnabled = state?.status === AccountStatusEnum.EnableTrading;
 
+  // A TWAP keeps running server-side after the tab is closed, so on mount pick
+  // up any ticket already in flight for this market. Without this, reloading
+  // mid-execution made a live order look like it had vanished.
+  //
+  // Only an already-cached session is used (`peekSession`): looking at progress
+  // must never pop a signature request.
+  React.useEffect(() => {
+    if (tracked || progress) return;
+    let cancelled = false;
+    (async () => {
+      const session =
+        address && brokerId ? peekSession(brokerId, address) : undefined;
+      const open = await queryOpenTicket(orderlySymbol, session).catch(() => null);
+      if (cancelled || !open) return;
+      setProgress(open);
+      setTracked({ id: open.ticket_id, session });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderlySymbol, address, brokerId]);
+
   // Follow the ticket after it is placed: a TWAP fills over minutes, so without
   // this the panel would go quiet and the trader could not tell whether their
   // order was working or finished.
@@ -155,7 +180,7 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       const p = await queryTicket(tracked.id, tracked.session).catch(() => null);
       if (cancelled || !p) return;
       setProgress(p);
-      if (["COMPLETE", "CANCEL", "EXPIRED"].includes(p.status)) setTracked(null);
+      if (["COMPLETE", "CANCEL", "EXPIRED"].includes(p.status) || p.is_expired) setTracked(null);
     };
     poll();
     const timer = setInterval(poll, 5000);
