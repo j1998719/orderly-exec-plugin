@@ -1,11 +1,12 @@
 /**
- * Blockfill TWAP controls — rendered in the host's submit slot when the trader
- * picks our TWAP order type.
+ * Blockfill TWAP order form — rendered in place of the host's order-entry body
+ * when the trader picks our TWAP order type.
  *
- * Side and quantity are NOT duplicated here: they are read from the host's own
- * order form (`useOrderStore`), so the trader fills one form and this only adds
- * what TWAP needs — a duration, a maker/taker preference, and the submit that
- * routes to the blockfill execution engine.
+ * It follows the host's own layout (side, available, size, then the order's own
+ * settings) so TWAP reads as one of the exchange's order types rather than a
+ * bolted-on panel. Quantity is written through the host's order store, and the
+ * asset info below (est. liq. price, fees) is the host's own — we do not
+ * duplicate it.
  *
  * This IS a real React component (hooks allowed), rendered by the interceptor.
  */
@@ -18,6 +19,7 @@ import {
   useWalletConnector,
   useOrderStore,
   useSymbolInfo,
+  useMarkPriceBySymbol,
 } from "@orderly.network/hooks";
 import { AccountStatusEnum } from "@orderly.network/types";
 
@@ -87,6 +89,29 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   // precision the instrument does not trade in.
   const symbolInfo = useSymbolInfo(orderlySymbol);
   const baseDp: number = (symbolInfo?.("base_dp", 4) as number | undefined) ?? 4;
+
+  // Order size can be entered either as a quantity or as notional; the mark
+  // price converts between them and the quantity remains the single source of
+  // truth (it is what the host's store and our ticket both use).
+  const markPrice = useMarkPriceBySymbol(orderlySymbol);
+  const setQuantity = (value: string) =>
+    actions?.updateOrderByKey?.("order_quantity", value);
+  const notional =
+    Number(qty) > 0 && markPrice > 0 ? String(Number((Number(qty) * markPrice).toFixed(2))) : "";
+  const setNotional = (value: string) => {
+    const usd = Number(value);
+    if (!value) return setQuantity("");
+    if (!Number.isFinite(usd) || markPrice <= 0) return;
+    setQuantity(String(Number((usd / markPrice).toFixed(baseDp))));
+  };
+
+  // Timeout is entered as hours + minutes; the ticket carries milliseconds.
+  const hours = String(Math.floor(timeoutMs / 3_600_000) || 0);
+  const minutes = String(Math.floor((timeoutMs % 3_600_000) / 60_000) || 0);
+  const setDuration = (h: string, m: string) => {
+    const ms = (Number(h) || 0) * 3_600_000 + (Number(m) || 0) * 60_000;
+    setTimeoutMs(ms);
+  };
 
   // Live account state from the Orderly SDK (the panel is rendered inside
   // OrderlyAppProvider, so these stream hooks are in-context).
@@ -213,29 +238,70 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
         </button>
       </div>
 
-      <div className="oui-text-xs oui-text-base-contrast-54">
-        Available: {available.toFixed(2)} {quote}
+      <div className="oui-flex oui-justify-between oui-text-xs oui-text-base-contrast-54">
+        <span>Available</span>
+        <span>
+          {available.toFixed(2)} {quote}
+        </span>
       </div>
 
-      {/* Quantity. TWAP has no price, so this is the only order input we need. */}
-      <label className="oui-flex oui-flex-col oui-text-xs oui-gap-1">
-        Quantity
-        <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
-          <input
-            className="oui-flex-1 oui-bg-transparent oui-outline-none"
-            inputMode="decimal"
-            value={qty}
-            onChange={(e) => actions?.updateOrderByKey?.("order_quantity", e.target.value)}
-            placeholder="0"
-          />
-          <span className="oui-text-base-contrast-54">{base}</span>
-        </div>
-      </label>
+      {/* Quantity in base units and the same order expressed as notional. Both
+          edit the one order size — traders size either way round. */}
+      <div className="oui-grid oui-grid-cols-2 oui-gap-2">
+        <label className="oui-flex oui-flex-col oui-text-xs oui-gap-1">
+          Qty
+          <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
+            <input
+              className="oui-w-full oui-min-w-0 oui-flex-1 oui-bg-transparent oui-outline-none"
+              inputMode="decimal"
+              value={qty}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder="0"
+            />
+            <span className="oui-text-base-contrast-54">{base}</span>
+          </div>
+        </label>
+        <label className="oui-flex oui-flex-col oui-text-xs oui-gap-1">
+          Order size
+          <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
+            <input
+              className="oui-w-full oui-min-w-0 oui-flex-1 oui-bg-transparent oui-outline-none"
+              inputMode="decimal"
+              value={notional}
+              onChange={(e) => setNotional(e.target.value)}
+              placeholder="0"
+            />
+            <span className="oui-text-base-contrast-54">{quote}</span>
+          </div>
+        </label>
+      </div>
 
-      {/* Execution window */}
+      {/* Execution window: an exact hours/minutes entry plus the common presets. */}
       <div className="oui-flex oui-flex-col oui-gap-1">
-        <span className="oui-text-xs">Duration</span>
-        <div className="oui-flex oui-gap-2">
+        <span className="oui-text-xs">Timeout</span>
+        <div className="oui-grid oui-grid-cols-2 oui-gap-2">
+          <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
+            <input
+              className="oui-w-full oui-min-w-0 oui-flex-1 oui-bg-transparent oui-outline-none oui-text-xs"
+              inputMode="numeric"
+              value={hours}
+              onChange={(e) => setDuration(e.target.value, minutes)}
+              placeholder="0"
+            />
+            <span className="oui-text-xs oui-text-base-contrast-54">hr</span>
+          </div>
+          <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
+            <input
+              className="oui-w-full oui-min-w-0 oui-flex-1 oui-bg-transparent oui-outline-none oui-text-xs"
+              inputMode="numeric"
+              value={minutes}
+              onChange={(e) => setDuration(hours, e.target.value)}
+              placeholder="0"
+            />
+            <span className="oui-text-xs oui-text-base-contrast-54">min</span>
+          </div>
+        </div>
+        <div className="oui-grid oui-grid-cols-4 oui-gap-2">
           {TIMEOUT_PRESETS.map((p) => (
             <button key={p.label} className={btn(timeoutMs === p.ms)} onClick={() => setTimeoutMs(p.ms)}>
               {p.label}
@@ -244,23 +310,26 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
         </div>
       </div>
 
-      {/* Where this order leaves the position. The engine works to an absolute
-          target, so state it before the trader commits. */}
-      {Number(qty) > 0 && (
-        <div className="oui-text-xs oui-text-base-contrast-54">
-          Position {formatQty(currentPosition, baseDp)} →{" "}
-          {formatQty(currentPosition + (side === "BUY" ? Number(qty) : -Number(qty)), baseDp)} {base}
-        </div>
-      )}
-
       {/* Strategy: Maker / Taker */}
       <div className="oui-flex oui-flex-col oui-gap-1">
         <span className="oui-text-xs">Strategy</span>
-        <div className="oui-flex oui-gap-2">
+        <div className="oui-grid oui-grid-cols-2 oui-gap-2">
           <button className={btn(strategy === "MAKER")} onClick={() => setStrategy("MAKER")}>Maker</button>
           <button className={btn(strategy === "TAKER")} onClick={() => setStrategy("TAKER")}>Taker</button>
         </div>
       </div>
+
+      {/* Where this order leaves the position. The engine works to an absolute
+          target, so state it before the trader commits. */}
+      {Number(qty) > 0 && (
+        <div className="oui-flex oui-justify-between oui-text-xs oui-text-base-contrast-54">
+          <span>Position</span>
+          <span>
+            {formatQty(currentPosition, baseDp)} →{" "}
+            {formatQty(currentPosition + (side === "BUY" ? Number(qty) : -Number(qty)), baseDp)} {base}
+          </span>
+        </div>
+      )}
 
       <button
         className={`oui-mt-1 oui-py-2 oui-rounded oui-text-white ${
@@ -274,7 +343,7 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
         disabled={!isTradingEnabled}
       >
         {isTradingEnabled
-          ? `${side === "BUY" ? "Buy" : "Sell"} ${base} · TWAP`
+          ? `${side === "BUY" ? "Buy / Long" : "Sell / Short"} ${base}`
           : "Connect wallet to trade"}
       </button>
 
