@@ -36,6 +36,40 @@ function splitSymbol(sym?: string): { base: string; quote: string } {
   return { base: parts[1] ?? "ETH", quote: parts[2] ?? "USDC" };
 }
 
+/**
+ * The order-form body for our TWAP type: just a quantity, since TWAP has no
+ * price to set. The value is written into the host's own order store, so the
+ * submit section (a separate slot) and the host's validation read the same
+ * quantity the trader typed.
+ */
+export function BlockfillTwapBody({ symbol }: { symbol?: string }) {
+  const { base } = splitSymbol(symbol);
+  const entry = useOrderStore((s: any) => s.entry);
+  const actions = useOrderStore((s: any) => s.actions);
+  const qty: string = entry?.order_quantity ?? "";
+
+  return (
+    <div className="oui-flex oui-flex-col oui-gap-2">
+      <label className="oui-flex oui-flex-col oui-text-xs oui-gap-1">
+        Quantity
+        <div className="oui-flex oui-items-center oui-gap-1 oui-border oui-rounded oui-px-2 oui-py-1">
+          <input
+            className="oui-flex-1 oui-bg-transparent oui-outline-none"
+            inputMode="decimal"
+            value={qty}
+            onChange={(e) => actions?.updateOrderByKey?.("order_quantity", e.target.value)}
+            placeholder="0"
+          />
+          <span className="oui-text-base-contrast-54">{base}</span>
+        </div>
+      </label>
+      <div className="oui-text-xs oui-text-base-contrast-36">
+        Executed over your chosen duration by the Blockfill engine.
+      </div>
+    </div>
+  );
+}
+
 export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: any }) {
   const { base, quote } = splitSymbol(symbol);
 
