@@ -5,7 +5,13 @@
  * This IS a real React component (hooks allowed), rendered by the interceptor.
  */
 import * as React from "react";
-import { usePositionStream, useCollateral, useAccount, useConfig } from "@orderly.network/hooks";
+import {
+  usePositionStream,
+  useCollateral,
+  useAccount,
+  useConfig,
+  useWalletConnector,
+} from "@orderly.network/hooks";
 import { AccountStatusEnum } from "@orderly.network/types";
 
 import { placeTicket, getSession, isOnboarded, onboard, type Strategy } from "./api.js";
@@ -58,6 +64,15 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   const brokerId = useConfig<string>("brokerId");
   const address = state?.address;
 
+  // Sign through the wallet the trader actually connected (MetaMask,
+  // WalletConnect, Binance, …) rather than a hardcoded injected provider, so
+  // every wallet the host DEX supports works with this plugin.
+  const { wallet, connectedChain } = useWalletConnector();
+  const walletProvider = wallet?.provider as
+    | { request(args: { method: string; params?: unknown[] }): Promise<any> }
+    | undefined;
+  const chainId = connectedChain?.id ? Number(connectedChain.id) : undefined;
+
   // Only allow submitting once the trader has completed Orderly's own login
   // ("Enable Trading"). Before that there is no account context: balances and
   // positions read 0, so a ticket would target a position we cannot see.
@@ -89,14 +104,15 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       // so the order executes on THIS connected trader's account. If no wallet
       // address is available (local/demo harness), fall back to the static key.
       let session;
-      if (address && brokerId) {
+      if (address && brokerId && walletProvider) {
         setStatus("Sign in your wallet to authorize…");
-        session = await getSession(brokerId, address);
+        session = await getSession(brokerId, address, walletProvider);
         // First time on this DEX: delegate a trading key so the executor can
         // trade this account (one extra signature; hot-onboards within ~60s).
         if (!(await isOnboarded(session))) {
+          if (!chainId) throw new Error("wallet chain unavailable");
           setStatus("Enabling smart execution — sign to delegate…");
-          await onboard(session, brokerId, address);
+          await onboard(session, brokerId, address, chainId, walletProvider);
         }
       }
       setStatus("Placing…");

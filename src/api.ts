@@ -25,14 +25,21 @@ export interface Session {
 }
 
 /**
- * Sign a message with the connected wallet via EIP-191 `personal_sign`. Uses the
- * injected EIP-1193 provider (MetaMask & most browser wallets).
- * TODO(walletconnect): route through the Orderly wallet-connector for non-injected wallets.
+ * Minimal EIP-1193 provider. The caller passes the provider of the wallet the
+ * trader actually connected (from the Orderly wallet connector), so every
+ * supported wallet works — not just an injected browser extension.
  */
-async function personalSign(message: string, address: string): Promise<string> {
-  const eth = (globalThis as any).ethereum;
-  if (!eth?.request) throw new Error("no injected wallet available to sign");
-  return await eth.request({ method: "personal_sign", params: [message, address] });
+export interface WalletProvider {
+  request(args: { method: string; params?: unknown[] }): Promise<any>;
+}
+
+/** Sign a message with the connected wallet via EIP-191 `personal_sign`. */
+async function personalSign(
+  provider: WalletProvider,
+  message: string,
+  address: string,
+): Promise<string> {
+  return await provider.request({ method: "personal_sign", params: [message, address] });
 }
 
 const sessionCache = new Map<string, Session>();
@@ -41,7 +48,11 @@ const sessionCache = new Map<string, Session>();
  * Establish (or reuse a cached) wallet-signature session for `address` under
  * `brokerId`. Prompts one wallet signature on first use / after expiry.
  */
-export async function getSession(brokerId: string, address: string): Promise<Session> {
+export async function getSession(
+  brokerId: string,
+  address: string,
+  provider: WalletProvider,
+): Promise<Session> {
   const key = `${brokerId}:${address.toLowerCase()}`;
   const cached = sessionCache.get(key);
   if (cached && cached.expires_at - Date.now() > 60_000) return cached;
@@ -51,7 +62,7 @@ export async function getSession(brokerId: string, address: string): Promise<Ses
   if (!chRes.ok) throw new Error(`auth/challenge ${chRes.status}`);
   const challenge = (await chRes.json()) as { nonce: string; message: string };
 
-  const signature = await personalSign(challenge.message, address);
+  const signature = await personalSign(provider, challenge.message, address);
 
   const res = await fetch(`${base}/execution/v1/auth/session`, {
     method: "POST",
@@ -65,20 +76,15 @@ export async function getSession(brokerId: string, address: string): Promise<Ses
 }
 
 /** Sign EIP-712 typed data with the connected wallet (eth_signTypedData_v4). */
-async function signTypedDataV4(address: string, typedData: unknown): Promise<string> {
-  const eth = (globalThis as any).ethereum;
-  if (!eth?.request) throw new Error("no injected wallet available to sign");
-  return await eth.request({
+async function signTypedDataV4(
+  provider: WalletProvider,
+  address: string,
+  typedData: unknown,
+): Promise<string> {
+  return await provider.request({
     method: "eth_signTypedData_v4",
     params: [address, JSON.stringify(typedData)],
   });
-}
-
-/** The wallet's current chain id (decimal). Drives testnet vs mainnet Orderly. */
-async function walletChainId(): Promise<number> {
-  const eth = (globalThis as any).ethereum;
-  const hex: string = await eth.request({ method: "eth_chainId" });
-  return parseInt(hex, 16);
 }
 
 /** Whether this session's account already has a live delegated key on the executor. */
@@ -95,9 +101,14 @@ export async function isOnboarded(session: Session): Promise<boolean> {
  * so the executor can trade their account. Prompts one `eth_signTypedData_v4`.
  * The executor hot-onboards the account within ~60s afterwards.
  */
-export async function onboard(session: Session, brokerId: string, address: string): Promise<void> {
+export async function onboard(
+  session: Session,
+  brokerId: string,
+  address: string,
+  chain_id: number,
+  provider: WalletProvider,
+): Promise<void> {
   const base = blockfillServerUrl();
-  const chain_id = await walletChainId();
   const auth = { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` };
 
   const prep = await fetch(`${base}/execution/v1/onboard/prepare`, {
@@ -114,9 +125,9 @@ export async function onboard(session: Session, brokerId: string, address: strin
   // Brand-new wallet with no Orderly account: register it first (extra signature).
   let registration_signature: string | undefined;
   if (registration_typed_data) {
-    registration_signature = await signTypedDataV4(address, registration_typed_data);
+    registration_signature = await signTypedDataV4(provider, address, registration_typed_data);
   }
-  const signature = await signTypedDataV4(address, typed_data);
+  const signature = await signTypedDataV4(provider, address, typed_data);
 
   const comp = await fetch(`${base}/execution/v1/onboard/complete`, {
     method: "POST",
