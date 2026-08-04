@@ -39,6 +39,17 @@ const TIMEOUT_PRESETS: Array<{ label: string; ms: number }> = [
   { label: "6h", ms: 6 * 60 * 60_000 },
 ];
 
+/**
+ * Format a quantity for display. Sizes are accumulated by repeated addition, so
+ * they carry binary floating-point noise (0.0051 arrives as
+ * 0.005099999999999993); round to the precision anyone actually trades in and
+ * drop trailing zeros.
+ */
+function formatQty(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  return String(Number(value.toFixed(6)));
+}
+
 /** "PERP_ETH_USDC" → { base: "ETH", quote: "USDC" }. */
 function splitSymbol(sym?: string): { base: string; quote: string } {
   const parts = (sym ?? "PERP_ETH_USDC").split("_");
@@ -224,6 +235,15 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
         </div>
       </div>
 
+      {/* Where this order leaves the position. The engine works to an absolute
+          target, so state it before the trader commits. */}
+      {Number(qty) > 0 && (
+        <div className="oui-text-xs oui-text-base-contrast-54">
+          Position {formatQty(currentPosition)} →{" "}
+          {formatQty(currentPosition + (side === "BUY" ? Number(qty) : -Number(qty)))} {base}
+        </div>
+      )}
+
       {/* Strategy: Maker / Taker */}
       <div className="oui-flex oui-flex-col oui-gap-1">
         <span className="oui-text-xs">Strategy</span>
@@ -273,7 +293,13 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
                   />
                 </div>
                 <div className="oui-text-base-contrast-54">
-                  Filled {done} / {total} {base} ({pct.toFixed(0)}%)
+                  Filled {formatQty(done)} / {formatQty(total)} {base} ({pct.toFixed(1)}%)
+                </div>
+                {/* A ticket targets an absolute position, so show where it is
+                    heading — "sell 0.05" of a 0.5 position is not the same as
+                    a target of 0.05, and only the target says which it is. */}
+                <div className="oui-text-base-contrast-36">
+                  {formatQty(progress.init_position)} → {formatQty(progress.target_position)} {base}
                 </div>
               </>
             );
