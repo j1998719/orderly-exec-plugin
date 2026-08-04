@@ -106,14 +106,22 @@ export async function onboard(session: Session, brokerId: string, address: strin
     body: JSON.stringify({ wallet_address: address, broker_id: brokerId, chain_id }),
   });
   if (!prep.ok) throw new Error(`onboard/prepare ${prep.status}: ${await prep.text()}`);
-  const { typed_data } = (await prep.json()) as { typed_data: unknown };
+  const { typed_data, registration_typed_data } = (await prep.json()) as {
+    typed_data: unknown;
+    registration_typed_data?: unknown;
+  };
 
+  // Brand-new wallet with no Orderly account: register it first (extra signature).
+  let registration_signature: string | undefined;
+  if (registration_typed_data) {
+    registration_signature = await signTypedDataV4(address, registration_typed_data);
+  }
   const signature = await signTypedDataV4(address, typed_data);
 
   const comp = await fetch(`${base}/execution/v1/onboard/complete`, {
     method: "POST",
     headers: auth,
-    body: JSON.stringify({ signature }),
+    body: JSON.stringify({ signature, registration_signature }),
   });
   if (!comp.ok) throw new Error(`onboard/complete ${comp.status}: ${await comp.text()}`);
 }
