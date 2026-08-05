@@ -37,6 +37,21 @@ const STATUS_LABEL: Record<string, string> = {
   EXPIRED: "Expired",
 };
 
+/**
+ * Why a ticket stopped, said the way a trader would.
+ *
+ * The API's own words are the engine's ("external" means the account owner
+ * called cancel) and reading them as-is leaves a trader guessing whether they
+ * or the system stopped their order.
+ */
+const CANCEL_REASON_LABEL: Record<string, string> = {
+  external: "by you",
+  superseded: "replaced by a newer order",
+  paused: "paused",
+  insufficient_margin: "insufficient margin",
+  canceled_by_system: "by the system",
+};
+
 function qty(value: number): string {
   if (!Number.isFinite(value)) return "0";
   return String(Number(value.toFixed(6)));
@@ -324,7 +339,10 @@ export function BotPanel({ symbol }: { symbol?: string }) {
                           {STATUS_LABEL[t.status] ?? t.status}
                         </span>
                         {t.cancel_reason && (
-                          <span className="oui-text-base-contrast-36"> · {t.cancel_reason}</span>
+                          <span className="oui-text-base-contrast-36">
+                            {" "}
+                            · {CANCEL_REASON_LABEL[t.cancel_reason] ?? t.cancel_reason}
+                          </span>
                         )}
                       </Td>
                     ) : (
