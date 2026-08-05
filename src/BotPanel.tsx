@@ -35,29 +35,6 @@ import {
 const TERMINAL = ["COMPLETE", "CANCEL", "EXPIRED"];
 const POLL_SECONDS = 5;
 
-const STATUS_LABEL: Record<string, string> = {
-  NEW: "Pending",
-  OPEN: "Running",
-  COMPLETE: "Finished",
-  CANCEL: "Ended",
-  EXPIRED: "Expired",
-};
-
-/**
- * Why a ticket stopped, said the way a trader would.
- *
- * The API's own words are the engine's ("external" means the account owner
- * called cancel) and reading them as-is leaves a trader guessing whether they
- * or the system stopped their order.
- */
-const CANCEL_REASON_LABEL: Record<string, string> = {
-  external: "by you",
-  superseded: "replaced by a newer order",
-  paused: "paused",
-  insufficient_margin: "insufficient margin",
-  canceled_by_system: "by the system",
-};
-
 function qty(value: number): string {
   if (!Number.isFinite(value)) return "0";
   return String(Number(value.toFixed(6)));
@@ -279,19 +256,13 @@ export function BotPanel({ symbol }: { symbol?: string }) {
         {
           title: "Status",
           dataIndex: "status",
-          width: 150,
+          width: 110,
+          onSort: true,
+          // The ticket's own status verbatim — NEW / OPEN / COMPLETE / CANCEL /
+          // EXPIRED. It is the value the API, the logs and support all quote,
+          // so renaming it here would only make those disagree.
           render: (_v, r) => (
-            <span>
-              <span className={r.status === "COMPLETE" ? "" : "oui-text-warning"}>
-                {STATUS_LABEL[r.status] ?? r.status}
-              </span>
-              {r.cancel_reason && (
-                <span className="oui-text-base-contrast-36">
-                  {" "}
-                  · {CANCEL_REASON_LABEL[r.cancel_reason] ?? r.cancel_reason}
-                </span>
-              )}
-            </span>
+            <span className={r.status === "COMPLETE" ? "" : "oui-text-warning"}>{r.status}</span>
           ),
         },
       ];
