@@ -19,6 +19,7 @@ import * as React from "react";
 import type { OrderlyPlugin } from "@orderly.network/plugin-core";
 
 import { BlockfillOrderPanel } from "./OrderForm.js";
+import { TwapHistory } from "./TwapHistory.js";
 import { TWAP_TYPE_ID } from "./mode.js";
 
 /** Runtime injector targets (see @orderly.network/ui-order-entry). */
@@ -26,6 +27,8 @@ const ADVANCED_SELECT_TARGET = "Trading.OrderEntry.AdvancedSelect";
 const MOBILE_TYPE_SELECT_TARGET = "Trading.OrderEntry.MobileTypeSelect";
 const BODY_TARGET = "Trading.OrderEntry.Body";
 const BUY_SELL_SWITCH_TARGET = "Trading.OrderEntry.BuySellSwitch";
+const DATA_LIST_DESKTOP_TABS = "Trading.DataList.Desktop.Tabs";
+const DATA_LIST_MOBILE_TABS = "Trading.DataList.Mobile.Tabs";
 
 const TWAP_OPTION = { value: TWAP_TYPE_ID, label: "TWAP" };
 
@@ -44,6 +47,22 @@ function withTwapOption(Original: React.ComponentType<any>, props: any) {
       {...props}
       items={[...items, TWAP_OPTION]}
       onValueChange={(value: string) => props?.onValueChange?.(value)}
+    />
+  );
+}
+
+/**
+ * Append a TWAP tab to the host's data list. Its own tabs only know about
+ * exchange orders, so a ticket would otherwise be visible only as scattered
+ * child fills with nothing showing the order that produced them.
+ */
+function withTwapTab(Original: React.ComponentType<any>, props: any) {
+  const items = Array.isArray(props?.items) ? props.items : [];
+  if (items.some((i: any) => i?.id === TWAP_TYPE_ID)) return <Original {...props} />;
+  return (
+    <Original
+      {...props}
+      items={[...items, { id: TWAP_TYPE_ID, title: "TWAP", content: <TwapHistory /> }]}
     />
   );
 }
@@ -98,6 +117,16 @@ export function registerBlockfillExec(): OrderlyPlugin {
           (props?.selectedCustomTypeId ?? null) === TWAP_TYPE_ID ? null : (
             <Original {...props} />
           ),
+      },
+      {
+        target: DATA_LIST_DESKTOP_TABS,
+        component: (Original: React.ComponentType<any>, props: any) =>
+          withTwapTab(Original, props),
+      },
+      {
+        target: DATA_LIST_MOBILE_TABS,
+        component: (Original: React.ComponentType<any>, props: any) =>
+          withTwapTab(Original, props),
       },
       {
         target: BODY_TARGET,

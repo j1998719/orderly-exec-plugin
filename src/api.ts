@@ -162,6 +162,8 @@ export interface TicketProgress {
   init_position: number;
   executed_position: number;
   status: string;
+  start_time_ms: number;
+  time_constraint_ms: number;
   /**
    * Set once the execution window has elapsed. The engine keeps working the
    * ticket by design, so this does NOT mean the order is finished — only
@@ -204,6 +206,28 @@ export async function queryOpenTicket(
   if (!res.ok) return null;
   const body = (await res.json()) as { tickets?: TicketProgress[] };
   return body.tickets?.[0] ?? null;
+}
+
+/** Stop a working ticket. It keeps whatever has already filled. */
+export async function cancelTicket(ticketId: string, session?: Session): Promise<void> {
+  const qs = new URLSearchParams({ exchange: "orderly", ticket_id: ticketId });
+  const res = await fetch(
+    `${blockfillServerUrl()}/execution/v1/tickets/cancelTicket?${qs}`,
+    { method: "DELETE", headers: authHeaders(session) },
+  );
+  if (!res.ok) throw new Error(`cancelTicket ${res.status}: ${await res.text()}`);
+}
+
+/** This account's tickets, newest first — the TWAP order history. */
+export async function queryTickets(session?: Session, limit = 50): Promise<TicketProgress[]> {
+  const qs = new URLSearchParams({ exchange: "orderly", limit: String(limit) });
+  const res = await fetch(
+    `${blockfillServerUrl()}/execution/v1/tickets/queryAllTickets?${qs}`,
+    { headers: authHeaders(session) },
+  );
+  if (!res.ok) return [];
+  const body = (await res.json()) as { tickets?: TicketProgress[] };
+  return (body.tickets ?? []).sort((a, b) => b.start_time_ms - a.start_time_ms);
 }
 
 /** Bearer session when we have one, else the static demo/local key. */

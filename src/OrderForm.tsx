@@ -30,6 +30,7 @@ import {
   onboard,
   queryTicket,
   queryOpenTicket,
+  cancelTicket,
   peekSession,
   type Session,
   type Strategy,
@@ -383,9 +384,29 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
             </span>
             {/* Past its window but still working — the engine keeps a ticket
                 running after expiry, so say so rather than implying it stopped. */}
-            <span>
-              {progress.status}
-              {progress.is_expired && progress.status === "OPEN" ? " · past window" : ""}
+            <span className="oui-flex oui-items-center oui-gap-2">
+              <span>
+                {progress.status}
+                {progress.is_expired && progress.status === "OPEN" ? " · past window" : ""}
+              </span>
+              {/* A TWAP runs for minutes, so it must be stoppable; it keeps
+                  whatever has already filled. */}
+              {!["COMPLETE", "CANCEL", "EXPIRED"].includes(progress.status) && (
+                <button
+                  className="oui-rounded oui-bg-base-5 oui-px-2 oui-py-0.5 oui-text-xs"
+                  onClick={async () => {
+                    setStatus("Cancelling…");
+                    try {
+                      await cancelTicket(progress.ticket_id, tracked?.session);
+                      setStatus("");
+                    } catch (e: any) {
+                      setStatus(`Cancel failed: ${e?.message ?? e}`);
+                    }
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
             </span>
           </div>
           {(() => {
