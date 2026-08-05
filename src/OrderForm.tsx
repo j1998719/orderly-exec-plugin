@@ -395,16 +395,18 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
                 <button
                   className="oui-rounded oui-bg-base-5 oui-px-2 oui-py-0.5 oui-text-xs"
                   onClick={async () => {
-                    setStatus("Cancelling…");
+                    setStatus("Ending…");
                     try {
                       await cancelTicket(progress.ticket_id, tracked?.session);
                       setStatus("");
                     } catch (e: any) {
-                      setStatus(`Cancel failed: ${e?.message ?? e}`);
+                      setStatus(`Could not end: ${e?.message ?? e}`);
                     }
                   }}
                 >
-                  Cancel
+                  {/* Same word as the Bot panel's action — one verb for one
+                      thing, so they cannot read as two different operations. */}
+                  End
                 </button>
               )}
             </span>

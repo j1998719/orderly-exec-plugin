@@ -19,8 +19,12 @@ import * as React from "react";
 import type { OrderlyPlugin } from "@orderly.network/plugin-core";
 
 import { BlockfillOrderPanel } from "./OrderForm.js";
-import { TwapHistory } from "./TwapHistory.js";
+import { BotPanel } from "./BotPanel.js";
 import { TWAP_TYPE_ID } from "./mode.js";
+
+/** Id of the data-list tab. Distinct from the order type — the tab holds every
+ *  strategy the module offers, of which TWAP is the first. */
+const BOT_TAB_ID = "blockfill-bot";
 
 /** Runtime injector targets (see @orderly.network/ui-order-entry). */
 const ADVANCED_SELECT_TARGET = "Trading.OrderEntry.AdvancedSelect";
@@ -52,17 +56,20 @@ function withTwapOption(Original: React.ComponentType<any>, props: any) {
 }
 
 /**
- * Append a TWAP tab to the host's data list. Its own tabs only know about
+ * Append the Bot tab to the host's data list. Its own tabs only know about
  * exchange orders, so a ticket would otherwise be visible only as scattered
  * child fills with nothing showing the order that produced them.
  */
-function withTwapTab(Original: React.ComponentType<any>, props: any) {
+function withBotTab(Original: React.ComponentType<any>, props: any) {
   const items = Array.isArray(props?.items) ? props.items : [];
-  if (items.some((i: any) => i?.id === TWAP_TYPE_ID)) return <Original {...props} />;
+  if (items.some((i: any) => i?.id === BOT_TAB_ID)) return <Original {...props} />;
   return (
     <Original
       {...props}
-      items={[...items, { id: TWAP_TYPE_ID, title: "TWAP", content: <TwapHistory /> }]}
+      items={[
+        ...items,
+        { id: BOT_TAB_ID, title: "Bot", content: <BotPanel symbol={props?.symbol} /> },
+      ]}
     />
   );
 }
@@ -121,12 +128,12 @@ export function registerBlockfillExec(): OrderlyPlugin {
       {
         target: DATA_LIST_DESKTOP_TABS,
         component: (Original: React.ComponentType<any>, props: any) =>
-          withTwapTab(Original, props),
+          withBotTab(Original, props),
       },
       {
         target: DATA_LIST_MOBILE_TABS,
         component: (Original: React.ComponentType<any>, props: any) =>
-          withTwapTab(Original, props),
+          withBotTab(Original, props),
       },
       {
         target: BODY_TARGET,
