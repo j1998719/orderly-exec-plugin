@@ -132,7 +132,6 @@ export function BotPanel({ symbol }: { symbol?: string }) {
   const [rows, setRows] = React.useState<TicketProgress[] | null>(null);
   const [view, setView] = React.useState<"running" | "history">("running");
   const [onlyThisPair, setOnlyThisPair] = React.useState(false);
-  const [countdown, setCountdown] = React.useState(POLL_SECONDS);
   const [needsSignIn, setNeedsSignIn] = React.useState(false);
   const [error, setError] = React.useState("");
 
@@ -163,18 +162,14 @@ export function BotPanel({ symbol }: { symbol?: string }) {
         if (e instanceof NotSignedInError) setNeedsSignIn(true);
         else setError(e?.message ?? String(e));
         setRows(null);
-      } finally {
-        if (!cancelled) setCountdown(POLL_SECONDS);
       }
     };
     load();
     // Running tickets change while the panel is open.
     const poll = setInterval(load, POLL_SECONDS * 1000);
-    const tick = setInterval(() => setCountdown((s) => (s > 1 ? s - 1 : s)), 1000);
     return () => {
       cancelled = true;
       clearInterval(poll);
-      clearInterval(tick);
     };
   }, [session]);
 
@@ -357,7 +352,6 @@ export function BotPanel({ symbol }: { symbol?: string }) {
           </button>
         ))}
         <span className="oui-ml-auto oui-flex oui-items-center oui-gap-3 oui-text-base-contrast-36">
-          {rows && <span>Data refreshes in {countdown}s</span>}
           {symbol && (
             <label className="oui-flex oui-items-center oui-gap-1">
               <input
