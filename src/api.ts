@@ -1,22 +1,32 @@
 /**
  * Client for the blockfill execution backend (blockfill-server, Execution mode).
  *
- * Auth: the trader signs `AddOrderlyKey` once, delegating a scoped trading key
- * to the executor. Orderly verifies that signature, and the server returns a
- * Bearer token in the same response; orders then authenticate with the token, so
- * a trader always trades their OWN account. (A static-key fallback via
- * `globalThis` remains for local/demo harnesses.)
+ * # How a request proves who it is
  *
- * There used to be a SIWE sign-in in front of this, so the trader signed twice:
- * once to log in, once to delegate. The delegation proves everything the login
- * did — Orderly rejects an `AddOrderlyKey` that did not come from the wallet —
- * so the login was asking for a signature to establish a fact the next
- * signature established anyway. One prompt now, and it is the one that
- * describes what the trader is actually agreeing to.
+ * The browser holds an ECDSA P-256 keypair (see `./signing`). Its public half is
+ * bound to the trader's account during onboarding, at the moment Orderly
+ * confirms the wallet signed `AddOrderlyKey`; every later request is signed with
+ * the private half. So nothing secret is ever transmitted: intercepting a
+ * request yields a signature over that one call at that one instant.
  *
- * Note the trader's own Orderly key never leaves the browser. We do not receive
- * a credential; we ask for one to be issued to us.
+ * Two things this replaced, and why:
+ *
+ * - A **SIWE sign-in**, which asked the trader for a second wallet signature to
+ *   establish what the delegation establishes anyway (Orderly rejects an
+ *   `AddOrderlyKey` that did not come from the wallet). One prompt now, and it
+ *   is the one that describes what they are actually agreeing to.
+ * - A **bearer token**, which was one secret sent on every request and therefore
+ *   worth stealing once. A signature is worth stealing for thirty seconds, for
+ *   one request that has already happened.
+ *
+ * The trader's own Orderly key never leaves the browser either. We do not
+ * receive a credential; we ask Orderly to issue one to us.
+ *
+ * (A static `X-API-Key` fallback via `globalThis` remains for local harnesses
+ * with no wallet.)
  */
+
+import { getOrCreateKey, dropKey, signRequest, type RequestKey } from "./signing.js";
 
 /**
  * blockfill-server base URL, from `globalThis.BLOCKFILL_SERVER_URL`. Resolved at
@@ -28,9 +38,15 @@ function blockfillServerUrl(): string {
 
 export type Strategy = "MAKER" | "TAKER";
 
+/**
+ * An onboarded account. Carries no secret — the signing key stays in IndexedDB
+ * and `brokerId`/`address` are how we find it again.
+ */
 export interface Session {
-  token: string;
   account_id: string;
+  brokerId: string;
+  address: string;
+  /** When the delegation lapses and the trader must sign again. */
   expires_at: number;
 }
 
@@ -70,8 +86,25 @@ function storage(): Storage | undefined {
   }
 }
 
+/**
+ * Whether a stored session is usable — which means every field, not just an
+ * unexpired date.
+ *
+ * `brokerId` and `address` are checked because they are how the signing key is
+ * found, and because a session written by an older build does not have them:
+ * it stored a bearer token instead. Such a record looked perfectly live by its
+ * expiry and then failed deep inside a request with "Cannot read properties of
+ * undefined (reading 'toLowerCase')". Treating a shape we no longer understand
+ * as absent sends the trader back through onboarding, which is the only thing
+ * that can fix it anyway.
+ */
 function isLive(session?: Session): boolean {
-  return !!session?.token && session.expires_at - Date.now() > 60_000;
+  return (
+    !!session?.account_id &&
+    !!session.brokerId &&
+    !!session.address &&
+    session.expires_at - Date.now() > 60_000
+  );
 }
 
 function rememberSession(key: string, session: Session): void {
@@ -99,7 +132,30 @@ function recallSession(key: string): Session | undefined {
 }
 
 /**
- * The current session, if one is still valid. Unlike `getSession` this never
+ * Drop a session the server has stopped accepting.
+ *
+ * Not-yet-expired is not the same as still valid: the server may have been
+ * redeployed, the delegation revoked, or the account onboarded again from
+ * another browser. Without this the panel kept presenting a dead credential
+ * every five seconds and rendering the 401 as a load failure, which reads as
+ * "something is broken" rather than "sign in again".
+ */
+function forgetSession(): void {
+  sessionCache.clear();
+  const store = storage();
+  if (!store) return;
+  try {
+    for (let i = store.length - 1; i >= 0; i--) {
+      const k = store.key(i);
+      if (k?.startsWith(SESSION_STORE_PREFIX)) store.removeItem(k);
+    }
+  } catch {
+    /* blocked — the in-memory clear above is what matters this session */
+  }
+}
+
+/**
+ * The current session, if one is still valid. Unlike `authorize` this never
  * asks the wallet to sign — use it for read-only calls, which must not pop a
  * signature request.
  */
@@ -126,14 +182,19 @@ async function signTypedDataV4(
 }
 
 /**
- * Authorize smart execution for `address` under `brokerId`, reusing a stored
- * token when there is one.
+ * Authorize TWAP for `address` under `brokerId`, reusing a stored
+ * authorization when there is one.
  *
  * On first use this prompts one `eth_signTypedData_v4`: an `AddOrderlyKey`
  * delegating a `read,trading` key to the executor. That is the only signature —
  * it is what lets the executor keep working a TWAP after the tab closes, and,
- * because Orderly validates it against the wallet, it is also what authenticates
- * the trader to us. The token it returns carries that proof forward.
+ * because Orderly validates it against the wallet, it is also what tells the
+ * server that this browser's signing key belongs to this trader.
+ *
+ * The signing key is generated *before* `prepare` and its public half sent
+ * along, so the two facts are established together. The server holds it aside
+ * until Orderly confirms the wallet signature and only then binds it — sending
+ * a public key is not a claim anyone has to believe on its own.
  *
  * A brand-new wallet with no Orderly account signs a `Registration` too; Orderly
  * requires it before it will accept any key, so the trader can go from a fresh
@@ -153,11 +214,17 @@ export async function authorize(
 
   const base = blockfillServerUrl();
   const json = { "Content-Type": "application/json" };
+  const requestKey = await getOrCreateKey(brokerId, address);
 
   const prep = await fetch(`${base}/execution/v1/onboard/prepare`, {
     method: "POST",
     headers: json,
-    body: JSON.stringify({ wallet_address: address, broker_id: brokerId, chain_id }),
+    body: JSON.stringify({
+      wallet_address: address,
+      broker_id: brokerId,
+      chain_id,
+      client_public_key: requestKey.publicKey,
+    }),
   });
   if (!prep.ok) throw new Error(`onboard/prepare ${prep.status}: ${await prep.text()}`);
   const { typed_data, registration_typed_data } = (await prep.json()) as {
@@ -182,15 +249,54 @@ export async function authorize(
     }),
   });
   if (!comp.ok) throw new Error(`onboard/complete ${comp.status}: ${await comp.text()}`);
-  const { account_id, token, token_expires_at_ms } = (await comp.json()) as {
+  const { account_id, expiration_ms } = (await comp.json()) as {
     account_id: string;
-    token: string;
-    token_expires_at_ms: number;
+    expiration_ms: number;
   };
 
-  const session: Session = { token, account_id, expires_at: token_expires_at_ms };
+  const session: Session = { account_id, brokerId, address, expires_at: expiration_ms };
   rememberSession(key, session);
   return session;
+}
+
+/**
+ * Send an authenticated request.
+ *
+ * Everything goes through here so the signed path and the requested path are
+ * the same string by construction. Signing `pathAndQuery` separately from
+ * building the URL is the obvious way to write this and the obvious way to get
+ * a signature that verifies nowhere: any difference in encoding or parameter
+ * order, and the server rebuilds different bytes.
+ */
+async function call(
+  method: string,
+  pathAndQuery: string,
+  session?: Session,
+): Promise<Response> {
+  let headers: Record<string, string>;
+  if (session) {
+    const requestKey: RequestKey = await getOrCreateKey(session.brokerId, session.address);
+    headers = await signRequest(requestKey, session.account_id, method, pathAndQuery);
+  } else {
+    // Local/demo harness with no wallet: the static key path.
+    const apiKey = (globalThis as any).BLOCKFILL_SESSION_TOKEN ?? "";
+    const user = (globalThis as any).BLOCKFILL_USER_ID ?? "";
+    if (!apiKey || !user) throw new NotSignedInError();
+    headers = { "X-API-Key": apiKey, "X-User-Id": user };
+  }
+  return await fetch(`${blockfillServerUrl()}${pathAndQuery}`, { method, headers });
+}
+
+/**
+ * Drop everything identifying this browser to the server, so the next call
+ * onboards afresh: the stored session *and* the signing key it refers to.
+ *
+ * Both, because they are only meaningful together — a key the server no longer
+ * has a binding for verifies nothing, and would fail silently forever.
+ */
+async function forgetAll(session?: Session): Promise<void> {
+  forgetSession();
+  if (session) await dropKey(session.brokerId, session.address);
 }
 
 export interface TicketProgress {
@@ -213,16 +319,15 @@ export interface TicketProgress {
   is_expired?: boolean;
 }
 
+const TICKETS = "/execution/v1/tickets";
+
 /** Fetch one ticket so the panel can show how far execution has got. */
 export async function queryTicket(
   ticketId: string,
   session?: Session,
 ): Promise<TicketProgress | null> {
   const qs = new URLSearchParams({ exchange: "orderly", ticket_id: ticketId });
-  const res = await fetch(
-    `${blockfillServerUrl()}/execution/v1/tickets/queryAllTickets?${qs}`,
-    { headers: authHeaders(session) },
-  );
+  const res = await call("GET", `${TICKETS}/queryAllTickets?${qs}`, session);
   if (!res.ok) return null;
   const body = (await res.json()) as { tickets?: TicketProgress[] };
   return body.tickets?.find((t) => t.ticket_id === ticketId) ?? null;
@@ -240,10 +345,7 @@ export async function queryOpenTicket(
   session?: Session,
 ): Promise<TicketProgress | null> {
   const qs = new URLSearchParams({ exchange: "orderly", symbol });
-  const res = await fetch(
-    `${blockfillServerUrl()}/execution/v1/tickets/queryOpenTickets?${qs}`,
-    { headers: authHeaders(session) },
-  );
+  const res = await call("GET", `${TICKETS}/queryOpenTickets?${qs}`, session);
   if (!res.ok) return null;
   const body = (await res.json()) as { tickets?: TicketProgress[] };
   return body.tickets?.[0] ?? null;
@@ -252,10 +354,11 @@ export async function queryOpenTicket(
 /** Stop a working ticket. It keeps whatever has already filled. */
 export async function cancelTicket(ticketId: string, session?: Session): Promise<void> {
   const qs = new URLSearchParams({ exchange: "orderly", ticket_id: ticketId });
-  const res = await fetch(
-    `${blockfillServerUrl()}/execution/v1/tickets/cancelTicket?${qs}`,
-    { method: "DELETE", headers: authHeaders(session) },
-  );
+  const res = await call("DELETE", `${TICKETS}/cancelTicket?${qs}`, session);
+  if (res.status === 401 || res.status === 403) {
+    await forgetAll(session);
+    throw new NotSignedInError();
+  }
   if (!res.ok) throw new Error(`cancelTicket ${res.status}: ${await res.text()}`);
 }
 
@@ -279,22 +382,18 @@ export class NotSignedInError extends Error {
  */
 export async function queryTickets(session?: Session, limit = 50): Promise<TicketProgress[]> {
   const qs = new URLSearchParams({ exchange: "orderly", limit: String(limit) });
-  const res = await fetch(
-    `${blockfillServerUrl()}/execution/v1/tickets/queryAllTickets?${qs}`,
-    { headers: authHeaders(session) },
-  );
+  const res = await call("GET", `${TICKETS}/queryAllTickets?${qs}`, session);
+  // A rejected credential is a state with an action attached, not a load
+  // failure: drop it and say so, so the panel offers the button again instead
+  // of showing "could not load your orders" until someone clears storage by
+  // hand. Anything else really is a failure and keeps its message.
+  if (res.status === 401 || res.status === 403) {
+    await forgetAll(session);
+    throw new NotSignedInError();
+  }
   if (!res.ok) throw new Error(`queryAllTickets ${res.status}: ${await res.text()}`);
   const body = (await res.json()) as { tickets?: TicketProgress[] };
   return (body.tickets ?? []).sort((a, b) => b.start_time_ms - a.start_time_ms);
-}
-
-/** Bearer session when we have one, else the static demo/local key. */
-function authHeaders(session?: Session): Record<string, string> {
-  if (session?.token) return { Authorization: `Bearer ${session.token}` };
-  const key = (globalThis as any).BLOCKFILL_SESSION_TOKEN ?? "";
-  const user = (globalThis as any).BLOCKFILL_USER_ID ?? "";
-  if (!key || !user) throw new NotSignedInError();
-  return { "X-API-Key": key, "X-User-Id": user };
 }
 
 export interface PlaceTicketParams {
@@ -316,9 +415,9 @@ export interface PlaceTicketResponse {
 }
 
 /**
- * POST /execution/v1/tickets/placeTicket. With a `session`, authenticates via the
- * Bearer token (account_id derived server-side from the wallet signature).
- * Without one, falls back to the static `globalThis` key (demo/local only).
+ * POST /execution/v1/tickets/placeTicket. With a `session`, signs the request
+ * with this browser's key. Without one, falls back to the static `globalThis`
+ * key (demo/local only).
  */
 export async function placeTicket(
   params: PlaceTicketParams,
@@ -332,11 +431,15 @@ export async function placeTicket(
     ...(params.strategy ? { strategy: params.strategy } : {}),
   });
 
-  const res = await fetch(
-    `${blockfillServerUrl()}/execution/v1/tickets/placeTicket?${qs.toString()}`,
-    { method: "POST", headers: authHeaders(session) },
-  );
+  const res = await call("POST", `${TICKETS}/placeTicket?${qs}`, session);
 
+  // A rejected credential here read as "API key is invalid or missing", which
+  // points at configuration and is the wrong thing to go and check. Drop it so
+  // the next attempt re-authorizes, and say what to do.
+  if (res.status === 401 || res.status === 403) {
+    await forgetAll(session);
+    throw new NotSignedInError();
+  }
   if (!res.ok) {
     throw new Error(`placeTicket ${res.status}: ${await res.text()}`);
   }

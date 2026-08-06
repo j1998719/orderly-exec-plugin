@@ -164,23 +164,42 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       time_constraint_ms: timeoutMs,
       strategy, // MAKER / TAKER hint for the execution engine
     };
+    const hasWallet = !!(address && brokerId && walletProvider && chainId);
+
+    // Real auth: one signature delegates a trading key to the executor and
+    // returns the credential this order authenticates with, so it executes on
+    // THIS connected trader's account. Already authorized? No prompt. With no
+    // wallet available (local/demo harness) we fall back to the static key.
+    const withSession = async () => {
+      if (!hasWallet) return undefined;
+      setStatus("Sign to enable TWAP…");
+      return await authorize(brokerId!, address!, chainId!, walletProvider);
+    };
+
     try {
-      // Real auth: one signature delegates a trading key to the executor and
-      // returns the token this order authenticates with, so it executes on THIS
-      // connected trader's account. Already authorized? No prompt. If no wallet
-      // address is available (local/demo harness), fall back to the static key.
-      let session;
-      if (address && brokerId && walletProvider) {
-        if (!chainId) throw new Error("wallet chain unavailable");
-        setStatus("Sign to enable smart execution…");
-        session = await authorize(brokerId, address, chainId, walletProvider);
-      }
+      let session = await withSession();
       setStatus("Placing…");
-      const res = await placeTicket(ticket, session);
-      // Name the ticket so the trader can find this exact order in the Bot tab.
-      setStatus(`Placed ${res.ticket_id.slice(0, 10)}… — see the Bot tab`);
+      try {
+        const res = await placeTicket(ticket, session);
+        // Name the ticket so the trader can find this exact order in the Bot tab.
+        setStatus(`Placed ${res.ticket_id.slice(0, 10)}… — see the Bot tab`);
+      } catch (e: any) {
+        // The credential was rejected — it has already been dropped, so a second
+        // attempt authorizes afresh. Worth one retry rather than a dead end: the
+        // usual cause is a delegation that lapsed or a server that was
+        // redeployed, and the trader can do nothing useful with either message.
+        if (e?.name !== "NotSignedInError" || !hasWallet) throw e;
+        session = await withSession();
+        setStatus("Placing…");
+        const res = await placeTicket(ticket, session);
+        setStatus(`Placed ${res.ticket_id.slice(0, 10)}… — see the Bot tab`);
+      }
     } catch (e: any) {
-      setStatus(`Failed: ${e?.message ?? e}`);
+      setStatus(
+        e?.name === "NotSignedInError"
+          ? "Failed: connect your wallet and enable trading, then try again"
+          : `Failed: ${e?.message ?? e}`,
+      );
     }
   }
 

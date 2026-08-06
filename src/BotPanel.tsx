@@ -150,17 +150,32 @@ export function BotPanel({ symbol }: { symbol?: string }) {
     };
   }, [session]);
 
-  async function enableSmartExecution() {
+  const [busy, setBusy] = React.useState(false);
+
+  async function enableTwap() {
     setError("");
+    setBusy(true);
     try {
       const chainId = connectedChain?.id ? Number(connectedChain.id) : undefined;
       const provider = wallet?.provider as any;
-      if (!address || !brokerId || !provider || !chainId) {
-        throw new Error("Connect your wallet and enable trading first");
+      // Name what is actually missing. "Connect your wallet and enable trading
+      // first" was true but useless when the wallet *was* connected and it was
+      // the chain id that came back empty -- it sent people to re-do a step
+      // they had already done.
+      const missing = [
+        !address && "wallet address",
+        !brokerId && "broker id",
+        !provider && "wallet provider",
+        !chainId && "chain id",
+      ].filter(Boolean);
+      if (missing.length) {
+        throw new Error(`Not available yet: ${missing.join(", ")}. Connect your wallet and enable trading first.`);
       }
-      setSession(await authorize(brokerId, address, chainId, provider));
+      setSession(await authorize(brokerId!, address!, chainId!, provider));
     } catch (e: any) {
       setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -342,11 +357,22 @@ export function BotPanel({ symbol }: { symbol?: string }) {
         // delegate a trading key -- a bigger thing than the word implied.
         <div className="oui-flex oui-flex-col oui-items-center oui-gap-2 oui-px-3 oui-py-8">
           <span className="oui-text-base-contrast-36">
-            Enable smart execution to place and track orders on your account.
+            Enable TWAP to place and track orders on your account.
           </span>
-          <button className="oui-rounded oui-bg-primary oui-px-3 oui-py-1.5" onClick={enableSmartExecution}>
-            Enable smart execution
+          <button
+            className="oui-rounded oui-bg-primary oui-px-3 oui-py-1.5 disabled:oui-opacity-50"
+            onClick={enableTwap}
+            disabled={busy}
+          >
+            {busy ? "Waiting for your wallet…" : "Enable TWAP"}
           </button>
+          {/* The error belongs here, not only next to the table. It used to
+              render under `error && rows`, and `rows` is null in this state --
+              so every failed click set a message that could not appear, and the
+              button looked like it did nothing at all. */}
+          {error && (
+            <span className="oui-max-w-[420px] oui-text-center oui-text-danger">{error}</span>
+          )}
         </div>
       ) : (
         <div className="oui-min-h-0 oui-flex-1">
