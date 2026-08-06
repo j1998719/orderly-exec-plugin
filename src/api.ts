@@ -30,10 +30,30 @@ import { getOrCreateKey, dropKey, signRequest, type RequestKey } from "./signing
 
 /**
  * blockfill-server base URL, from `globalThis.BLOCKFILL_SERVER_URL`. Resolved at
- * CALL time (the host page sets the global after this module is imported).
+ * CALL time, because the host page sets the global after this module is
+ * imported.
+ *
+ * Unset is an error rather than a default. The default used to be
+ * `https://exec.blockfill.example`, and `.example` is a reserved TLD (RFC 2606)
+ * that can never resolve — so a host that forgot to configure this got a DNS
+ * failure naming a domain that does not exist and never will, which is a long
+ * way from "you have not set BLOCKFILL_SERVER_URL".
+ *
+ * It must be `https://`. A host DEX is served over https, and browsers block
+ * http requests from an https page. `http://localhost` is the one exception —
+ * browsers treat it as trustworthy — which makes local testing work and is
+ * exactly why this is worth stating out loud: the mistake does not surface
+ * until the thing is deployed somewhere real.
  */
 function blockfillServerUrl(): string {
-  return (globalThis as any).BLOCKFILL_SERVER_URL ?? "https://exec.blockfill.example";
+  const url = (globalThis as any).BLOCKFILL_SERVER_URL;
+  if (!url) {
+    throw new Error(
+      "BLOCKFILL_SERVER_URL is not set — the host page must set " +
+        "globalThis.BLOCKFILL_SERVER_URL to the blockfill-server endpoint (https://…)",
+    );
+  }
+  return url;
 }
 
 export type Strategy = "MAKER" | "TAKER";
