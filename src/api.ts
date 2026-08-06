@@ -29,28 +29,34 @@
 import { getOrCreateKey, dropKey, signRequest, type RequestKey } from "./signing.js";
 
 /**
- * blockfill-server base URL, from `globalThis.BLOCKFILL_SERVER_URL`. Resolved at
- * CALL time, because the host page sets the global after this module is
- * imported.
+ * Base URL to prefix every request with, from `globalThis.BLOCKFILL_SERVER_URL`.
+ * Resolved at CALL time, because the host page sets the global after this module
+ * is imported.
  *
- * Unset is an error rather than a default. The default used to be
- * `https://exec.blockfill.example`, and `.example` is a reserved TLD (RFC 2606)
- * that can never resolve — so a host that forgot to configure this got a DNS
- * failure naming a domain that does not exist and never will, which is a long
- * way from "you have not set BLOCKFILL_SERVER_URL".
+ * Three cases, and the middle one is the interesting one:
  *
- * It must be `https://`. A host DEX is served over https, and browsers block
- * http requests from an https page. `http://localhost` is the one exception —
- * browsers treat it as trustworthy — which makes local testing work and is
- * exactly why this is worth stating out loud: the mistake does not surface
- * until the thing is deployed somewhere real.
+ * - **An absolute URL** (`https://exec.example.com`) — talk to that host
+ *   directly. It has to be https: the DEX page is served over https and
+ *   browsers block http requests from an https page. `http://localhost` is the
+ *   exception browsers make, which is worth knowing because it lets local
+ *   testing pass in a configuration that would be blocked anywhere real.
+ * - **An empty string** — send relative paths, so the requests go to the DEX's
+ *   own origin and something in front (a reverse proxy, or Vite's `proxy` in
+ *   dev) forwards `/execution` to blockfill-server. This is a deliberate
+ *   setting, not a missing one, and it is the tidiest deployment there is:
+ *   same-origin means no mixed content and no CORS.
+ * - **Unset** — an error. The default here used to be
+ *   `https://exec.blockfill.example`; `.example` is reserved by RFC 2606 and can
+ *   never resolve, so forgetting to configure this produced a DNS failure naming
+ *   a domain that does not exist, rather than saying what was not set.
  */
 function blockfillServerUrl(): string {
   const url = (globalThis as any).BLOCKFILL_SERVER_URL;
-  if (!url) {
+  if (url === undefined || url === null) {
     throw new Error(
       "BLOCKFILL_SERVER_URL is not set — the host page must set " +
-        "globalThis.BLOCKFILL_SERVER_URL to the blockfill-server endpoint (https://…)",
+        "globalThis.BLOCKFILL_SERVER_URL to the blockfill-server endpoint " +
+        "(https://…), or to \"\" if /execution is proxied from this origin",
     );
   }
   return url;

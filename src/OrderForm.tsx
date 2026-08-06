@@ -56,6 +56,29 @@ function splitSymbol(sym?: string): { base: string; quote: string } {
   return { base: parts[1] ?? "ETH", quote: parts[2] ?? "USDC" };
 }
 
+/**
+ * Whether the execution engine can trade this market.
+ *
+ * Orderly has two kinds of symbol. Shared markets are `PERP_<BASE>_USDC`, and a
+ * broker that lists its own adds a fourth segment naming itself —
+ * `PERP_AAPL_USDC_mythos`. On mainnet that is 50 of 130 markets, nearly all of
+ * them `mythos`, and nearly all of the equities.
+ *
+ * The engine cannot round-trip the fourth segment: its `Symbol` type holds a
+ * base and a quote, so an order goes back out as `PERP_AAPL_USDC`, which is not
+ * a market that exists. Two further things would need solving even then — those
+ * markets require isolated margin, and several accept only POST_ONLY while the
+ * strategy sends IOC.
+ *
+ * So this is checked here rather than left to fail later. Placing the ticket
+ * would otherwise succeed, and it would sit at OPEN until its deadline with
+ * nothing happening and nothing logged.
+ */
+function isSupportedMarket(symbol: string): boolean {
+  const parts = symbol.split("_");
+  return parts.length === 3 && parts[0].toUpperCase() === "PERP";
+}
+
 export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: any }) {
   const { base, quote } = splitSymbol(symbol);
 
@@ -76,6 +99,7 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
 
   // Orderly-native symbol for this market (e.g. "PERP_ETH_USDC").
   const orderlySymbol = symbol ?? `PERP_${base}_${quote}`;
+  const supported = isSupportedMarket(orderlySymbol);
 
   // Display precision for this market: the exchange's own base decimal places
   // (base_tick 0.0001 -> 4 dp for ETH), so sizes are not shown to a made-up
@@ -205,6 +229,22 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
 
   const btn = (active: boolean) =>
     `oui-px-2 oui-py-1 oui-rounded oui-text-sm ${active ? "oui-bg-primary oui-text-white" : "oui-bg-base-6"}`;
+
+  // Say so instead of rendering a form that cannot work. The host DEX decides
+  // which market is on screen, so this panel appears on markets the engine
+  // cannot trade; letting someone fill the form in and submit would place a
+  // ticket that sits at OPEN until its deadline, doing nothing.
+  if (!supported) {
+    return (
+      <div className="oui-flex oui-flex-col oui-items-center oui-gap-1 oui-rounded-lg oui-bg-base-8 oui-p-4 oui-text-center oui-text-sm">
+        <span className="oui-text-base-contrast">TWAP is not available on this market</span>
+        <span className="oui-text-xs oui-text-base-contrast-36">
+          {orderlySymbol.split("_").slice(3).join("_")} markets are listed by a single broker and
+          are not yet supported. Use the exchange&apos;s own order types here.
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="oui-flex oui-flex-col oui-gap-2 oui-p-2 oui-rounded-lg oui-bg-base-8">
