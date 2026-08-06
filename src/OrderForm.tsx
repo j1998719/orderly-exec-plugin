@@ -235,12 +235,21 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
   // cannot trade; letting someone fill the form in and submit would place a
   // ticket that sits at OPEN until its deadline, doing nothing.
   if (!supported) {
+    // Name the asset and the broker, and say the limit is this market rather
+    // than the asset. Without that it reads as arbitrary: on the same exchange
+    // TSLA works and AAPL does not, because TSLA is listed as a shared market
+    // and AAPL only as `PERP_AAPL_USDC_mythos`. A trader who is not told this
+    // concludes the panel is broken.
+    const broker = orderlySymbol.split("_").slice(3).join("_");
     return (
-      <div className="oui-flex oui-flex-col oui-items-center oui-gap-1 oui-rounded-lg oui-bg-base-8 oui-p-4 oui-text-center oui-text-sm">
-        <span className="oui-text-base-contrast">TWAP is not available on this market</span>
+      <div className="oui-flex oui-flex-col oui-items-center oui-gap-1.5 oui-rounded-lg oui-bg-base-8 oui-p-4 oui-text-center oui-text-sm">
+        <span className="oui-text-base-contrast">TWAP is not available for {base}</span>
         <span className="oui-text-xs oui-text-base-contrast-36">
-          {orderlySymbol.split("_").slice(3).join("_")} markets are listed by a single broker and
-          are not yet supported. Use the exchange&apos;s own order types here.
+          This is a broker-exclusive market{broker ? ` (${broker})` : ""}. Smart execution supports
+          shared markets only.
+        </span>
+        <span className="oui-text-xs oui-text-base-contrast-36">
+          Use the exchange&apos;s own order types for {base}.
         </span>
       </div>
     );
