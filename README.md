@@ -62,8 +62,12 @@ npm run build                    # tsc → dist/
       free collateral for "Available"). `target_position` is now computed off the real
       starting position, not a flat assumption. (Type-checked against SDK v3.1.5;
       pending live verification in a host DEX.)
-- [ ] Replace the static `X-API-Key` with a short-lived **session token** (wallet-signed
-      challenge → `POST /execution/v1/auth/session`) — see spec §7.
+- [x] Replace the static `X-API-Key` with a per-account **bearer token**, issued by
+      `POST /execution/v1/onboard/complete` alongside the delegated key — that is
+      where Orderly has just verified the trader's `AddOrderlyKey` signature, so it
+      is the one point where we know who is calling. The spec's separate SIWE
+      challenge/session step (§7) was dropped: it spent a second wallet signature
+      establishing what the delegation establishes anyway.
 - [ ] Add `strategy` (Maker/Taker) to the server ticket schema (spec §5), or map it to a
       strategy config on the executor.
 - [ ] Preview live in a host DEX (`OrderlyAppProvider plugins={[registerBlockfillExec()]}`)

@@ -23,7 +23,7 @@ import { DataTable, type Column } from "@orderly.network/ui";
 
 import {
   cancelTicket,
-  getSession,
+  authorize,
   peekSession,
   queryTickets,
   NotSignedInError,
@@ -150,7 +150,7 @@ export function BotPanel({ symbol }: { symbol?: string }) {
     };
   }, [session]);
 
-  async function signIn() {
+  async function enableSmartExecution() {
     setError("");
     try {
       const chainId = connectedChain?.id ? Number(connectedChain.id) : undefined;
@@ -158,7 +158,7 @@ export function BotPanel({ symbol }: { symbol?: string }) {
       if (!address || !brokerId || !provider || !chainId) {
         throw new Error("Connect your wallet and enable trading first");
       }
-      setSession(await getSession(brokerId, address, chainId, provider));
+      setSession(await authorize(brokerId, address, chainId, provider));
     } catch (e: any) {
       setError(e?.message ?? String(e));
     }
@@ -337,12 +337,15 @@ export function BotPanel({ symbol }: { symbol?: string }) {
       </div>
 
       {needsSignIn ? (
+        // The button prompts an AddOrderlyKey delegation, so it has to say so.
+        // Labelled "Sign in" it promised a login and produced a request to
+        // delegate a trading key -- a bigger thing than the word implied.
         <div className="oui-flex oui-flex-col oui-items-center oui-gap-2 oui-px-3 oui-py-8">
           <span className="oui-text-base-contrast-36">
-            Sign in to see the orders on your account.
+            Enable smart execution to place and track orders on your account.
           </span>
-          <button className="oui-rounded oui-bg-primary oui-px-3 oui-py-1.5" onClick={signIn}>
-            Sign in
+          <button className="oui-rounded oui-bg-primary oui-px-3 oui-py-1.5" onClick={enableSmartExecution}>
+            Enable smart execution
           </button>
         </div>
       ) : (

@@ -25,9 +25,7 @@ import { AccountStatusEnum } from "@orderly.network/types";
 
 import {
   placeTicket,
-  getSession,
-  isOnboarded,
-  onboard,
+  authorize,
   type Strategy,
 } from "./api.js";
 
@@ -167,20 +165,15 @@ export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: an
       strategy, // MAKER / TAKER hint for the execution engine
     };
     try {
-      // Real auth: establish a wallet-signature session (one signature prompt),
-      // so the order executes on THIS connected trader's account. If no wallet
+      // Real auth: one signature delegates a trading key to the executor and
+      // returns the token this order authenticates with, so it executes on THIS
+      // connected trader's account. Already authorized? No prompt. If no wallet
       // address is available (local/demo harness), fall back to the static key.
       let session;
       if (address && brokerId && walletProvider) {
         if (!chainId) throw new Error("wallet chain unavailable");
-        setStatus("Sign in your wallet to authorize…");
-        session = await getSession(brokerId, address, chainId, walletProvider);
-        // First time on this DEX: delegate a trading key so the executor can
-        // trade this account (one extra signature; hot-onboards within ~60s).
-        if (!(await isOnboarded(session))) {
-          setStatus("Enabling smart execution — sign to delegate…");
-          await onboard(session, brokerId, address, chainId, walletProvider);
-        }
+        setStatus("Sign to enable smart execution…");
+        session = await authorize(brokerId, address, chainId, walletProvider);
       }
       setStatus("Placing…");
       const res = await placeTicket(ticket, session);
