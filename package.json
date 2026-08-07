@@ -1,5 +1,5 @@
 {
-  "name": "@quantech-services-group/twap-plugin",
+  "name": "@quantech-services/twap-plugin",
   "version": "1.0.0",
   "description": "TWAP algorithmic execution for Orderly Network \u2014 taker and maker order entry with scheduled slicing. Shared markets only; broker-exclusive markets are not supported.",
   "type": "module",
