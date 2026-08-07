@@ -29,37 +29,37 @@
 import { getOrCreateKey, dropKey, signRequest, type RequestKey } from "./signing.js";
 
 /**
- * Base URL to prefix every request with, from `globalThis.TWAP_SERVER_URL`.
- * Resolved at CALL time, because the host page sets the global after this module
- * is imported.
+ * The hosted execution backend. Installing this package is the whole
+ * configuration: a DEX adds it to `plugins` and its traders can place TWAPs.
+ *
+ * Requiring a URL here was wrong for a marketplace module. The installing DEX
+ * has no way to know what to put — the backend is ours, not theirs — and the
+ * plugin threw at the first call until they guessed it.
+ */
+const DEFAULT_SERVER_URL = "https://blockfill-api.quantech.services";
+
+/**
+ * Base URL to prefix every request with. Resolved at CALL time, because a host
+ * page that does override it sets the global after this module is imported.
  *
  * Three cases, and the middle one is the interesting one:
  *
+ * - **Unset** — `DEFAULT_SERVER_URL`. The case that matters, because it is what
+ *   every marketplace install does.
  * - **An absolute URL** (`https://exec.example.com`) — talk to that host
- *   directly. It has to be https: the DEX page is served over https and
- *   browsers block http requests from an https page. `http://localhost` is the
- *   exception browsers make, which is worth knowing because it lets local
- *   testing pass in a configuration that would be blocked anywhere real.
- * - **An empty string** — send relative paths, so the requests go to the DEX's
- *   own origin and something in front (a reverse proxy, or Vite's `proxy` in
- *   dev) forwards `/execution` to the execution backend. This is a deliberate
- *   setting, not a missing one, and it is the tidiest deployment there is:
- *   same-origin means no mixed content and no CORS.
- * - **Unset** — an error. The default here used to be
- *   `https://exec.example.com`; `.example.com` is reserved by RFC 2606 and can
- *   never resolve, so forgetting to configure this produced a DNS failure naming
- *   a domain that does not exist, rather than saying what was not set.
+ *   instead, for self-hosting or a staging backend. It has to be https: the DEX
+ *   page is served over https and browsers block http requests from an https
+ *   page. `http://localhost` is the exception browsers make, which is worth
+ *   knowing because it lets local testing pass in a configuration that would be
+ *   blocked anywhere real.
+ * - **An empty string** — send relative paths, so requests go to the DEX's own
+ *   origin and something in front (a reverse proxy, or Vite's `proxy` in dev)
+ *   forwards `/execution`. Deliberate, not missing — which is why the check
+ *   below distinguishes `""` from unset rather than testing for falsiness.
  */
 function twapServerUrl(): string {
   const url = (globalThis as any).TWAP_SERVER_URL;
-  if (url === undefined || url === null) {
-    throw new Error(
-      "TWAP_SERVER_URL is not set — the host page must set " +
-        "globalThis.TWAP_SERVER_URL to the execution backend endpoint " +
-        "(https://…), or to \"\" if /execution is proxied from this origin",
-    );
-  }
-  return url;
+  return url === undefined || url === null ? DEFAULT_SERVER_URL : url;
 }
 
 export type Strategy = "MAKER" | "TAKER";

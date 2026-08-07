@@ -17,15 +17,22 @@ import { registerTwapExec } from "@j1998719/twap-plugin";
 </OrderlyAppProvider>
 ```
 
-Set the backend endpoint on the host page:
+That is the whole setup. The execution backend is hosted for you and already
+pointed at; the plugin reads the active symbol and account from the Orderly SDK
+context and uses whatever `brokerId` your app already has.
+
+A trader's first TWAP asks their wallet to sign Orderly's `AddOrderlyKey` once,
+delegating for 30 days. Nothing reusable is stored in their browser.
+
+### Pointing somewhere else (optional)
 
 ```ts
-globalThis.TWAP_SERVER_URL = "https://…";
+globalThis.TWAP_SERVER_URL = "https://your-backend.example";  // self-hosted
+globalThis.TWAP_SERVER_URL = "";                              // relative paths
 ```
 
-Or `""` to send relative paths, when something in front of your app already
-forwards `/execution` to the backend — same origin means no CORS and no mixed
-content.
+The empty string sends relative paths, for when something in front of your app
+already forwards `/execution` — same origin, so no CORS and no mixed content.
 
 ## Supported markets
 

@@ -1,6 +1,6 @@
 {
   "name": "@j1998719/twap-plugin",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "TWAP algorithmic execution for Orderly Network \u2014 taker and maker order entry with scheduled slicing. Shared markets only; broker-exclusive markets are not supported.",
   "type": "module",
   "main": "dist/plugin.js",
