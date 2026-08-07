@@ -24,16 +24,6 @@ context and uses whatever `brokerId` your app already has.
 A trader's first TWAP asks their wallet to sign Orderly's `AddOrderlyKey` once,
 delegating for 30 days. Nothing reusable is stored in their browser.
 
-### Pointing somewhere else (optional)
-
-```ts
-globalThis.TWAP_SERVER_URL = "https://your-backend.example";  // self-hosted
-globalThis.TWAP_SERVER_URL = "";                              // relative paths
-```
-
-The empty string sends relative paths, for when something in front of your app
-already forwards `/execution` — same origin, so no CORS and no mixed content.
-
 ## Supported markets
 
 | Symbol | Supported |
