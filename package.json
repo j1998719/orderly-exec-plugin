@@ -1,6 +1,6 @@
 {
-  "name": "@j1998719/twap-plugin",
-  "version": "0.12.0",
+  "name": "@quantech-services-group/twap-plugin",
+  "version": "1.0.0",
   "description": "TWAP algorithmic execution for Orderly Network \u2014 taker and maker order entry with scheduled slicing. Shared markets only; broker-exclusive markets are not supported.",
   "type": "module",
   "main": "dist/plugin.js",
@@ -32,11 +32,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/j1998719/twap-plugin.git"
+    "url": "git+https://github.com/quantech-services-group/twap-plugin.git"
   },
-  "homepage": "https://github.com/j1998719/twap-plugin#readme",
+  "homepage": "https://github.com/quantech-services-group/twap-plugin#readme",
   "bugs": {
-    "url": "https://github.com/j1998719/twap-plugin/issues"
+    "url": "https://github.com/quantech-services-group/twap-plugin/issues"
   },
   "keywords": [
     "orderly",

@@ -1,7 +1,7 @@
 {
-  "npmName": "@j1998719/twap-plugin",
+  "npmName": "@quantech-services-group/twap-plugin",
   "pluginId": "twap-exec",
-  "repoUrl": "https://github.com/j1998719/twap-plugin",
+  "repoUrl": "https://github.com/quantech-services-group/twap-plugin",
   "tags": [
     "Order Entry",
     "Trading",

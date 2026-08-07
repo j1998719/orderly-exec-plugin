@@ -1,4 +1,4 @@
-# @j1998719/twap-plugin
+# @quantech-services-group/twap-plugin
 
 TWAP algorithmic execution for the **Orderly Network Module Marketplace**.
 
@@ -10,7 +10,7 @@ every other order type untouched.
 ## Install
 
 ```tsx
-import { registerTwapExec } from "@j1998719/twap-plugin";
+import { registerTwapExec } from "@quantech-services-group/twap-plugin";
 
 <OrderlyAppProvider brokerId="…" plugins={[registerTwapExec()]}>
   …

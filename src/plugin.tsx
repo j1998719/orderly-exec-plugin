@@ -3,7 +3,7 @@
  *
  * A DEX installs this plugin into its `OrderlyAppProvider`:
  *
- *   import { registerTwapExec } from "@j1998719/twap-plugin";
+ *   import { registerTwapExec } from "@quantech-services-group/twap-plugin";
  *   <OrderlyAppProvider plugins={[registerTwapExec()]} ... />
  *
  * TWAP is offered as a custom order type through the SDK's own extension points:
