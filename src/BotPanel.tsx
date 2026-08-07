@@ -119,10 +119,17 @@ export function BotPanel({ symbol }: { symbol?: string }) {
 
   // Read-only: an existing session only. Looking at your own orders must never
   // pop a wallet signature — signing in is an explicit button below.
+  //
+  // Keyed by chain as well as account, because a session belongs to one Orderly
+  // cluster: switching networks must show that cluster's orders rather than
+  // keep presenting the previous one's.
+  const chainId = connectedChain?.id ? Number(connectedChain.id) : undefined;
   const [session, setSession] = React.useState<Session | undefined>();
   React.useEffect(() => {
-    setSession(address && brokerId ? peekSession(brokerId, address) : undefined);
-  }, [address, brokerId]);
+    setSession(
+      address && brokerId && chainId ? peekSession(brokerId, address, chainId) : undefined,
+    );
+  }, [address, brokerId, chainId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -156,7 +163,6 @@ export function BotPanel({ symbol }: { symbol?: string }) {
     setError("");
     setBusy(true);
     try {
-      const chainId = connectedChain?.id ? Number(connectedChain.id) : undefined;
       const provider = wallet?.provider as any;
       // Name what is actually missing. "Connect your wallet and enable trading
       // first" was true but useless when the wallet *was* connected and it was

@@ -72,6 +72,15 @@ export interface Session {
   account_id: string;
   brokerId: string;
   address: string;
+  /**
+   * The chain the wallet was on when this delegation was signed, which is what
+   * decides the Orderly cluster it belongs to.
+   *
+   * Carried in the session because `account_id` does not distinguish them — the
+   * same wallet has the same id on testnet and mainnet — and because it is how
+   * the right signing key is found again (`getOrCreateKey`).
+   */
+  chain_id: number;
   /** When the delegation lapses and the trader must sign again. */
   expires_at: number;
 }
@@ -87,8 +96,8 @@ export interface WalletProvider {
 
 const sessionCache = new Map<string, Session>();
 
-function sessionKey(brokerId: string, address: string): string {
-  return `${brokerId}:${address.toLowerCase()}`;
+function sessionKey(brokerId: string, address: string, chainId: number): string {
+  return `${brokerId}:${address.toLowerCase()}:${chainId}`;
 }
 
 /**
@@ -134,6 +143,12 @@ function isLive(session?: Session): boolean {
     !!session?.account_id &&
     !!session.brokerId &&
     !!session.address &&
+    // A session written before sessions knew about clusters has no chain, and
+    // there is no safe value to assume: guessing wrong means signing with the
+    // other cluster's key, or worse, being taken for the other cluster. Same
+    // reasoning as the missing-`brokerId` case above — a shape we no longer
+    // understand is treated as absent.
+    Number.isFinite(session.chain_id) &&
     session.expires_at - Date.now() > 60_000
   );
 }
@@ -190,8 +205,12 @@ function forgetSession(): void {
  * asks the wallet to sign — use it for read-only calls, which must not pop a
  * signature request.
  */
-export function peekSession(brokerId: string, address: string): Session | undefined {
-  const key = sessionKey(brokerId, address);
+export function peekSession(
+  brokerId: string,
+  address: string,
+  chainId: number,
+): Session | undefined {
+  const key = sessionKey(brokerId, address, chainId);
   const cached = sessionCache.get(key);
   if (isLive(cached)) return cached;
 
@@ -239,13 +258,13 @@ export async function authorize(
   chain_id: number,
   provider: WalletProvider,
 ): Promise<Session> {
-  const key = sessionKey(brokerId, address);
-  const cached = peekSession(brokerId, address);
+  const key = sessionKey(brokerId, address, chain_id);
+  const cached = peekSession(brokerId, address, chain_id);
   if (cached) return cached;
 
   const base = twapServerUrl();
   const json = { "Content-Type": "application/json" };
-  const requestKey = await getOrCreateKey(brokerId, address);
+  const requestKey = await getOrCreateKey(brokerId, address, chain_id);
 
   const prep = await fetch(`${base}/execution/v1/onboard/prepare`, {
     method: "POST",
@@ -285,7 +304,13 @@ export async function authorize(
     expiration_ms: number;
   };
 
-  const session: Session = { account_id, brokerId, address, expires_at: expiration_ms };
+  const session: Session = {
+    account_id,
+    brokerId,
+    address,
+    chain_id,
+    expires_at: expiration_ms,
+  };
   rememberSession(key, session);
   return session;
 }
@@ -306,7 +331,11 @@ async function call(
 ): Promise<Response> {
   let headers: Record<string, string>;
   if (session) {
-    const requestKey: RequestKey = await getOrCreateKey(session.brokerId, session.address);
+    const requestKey: RequestKey = await getOrCreateKey(
+      session.brokerId,
+      session.address,
+      session.chain_id,
+    );
     headers = await signRequest(requestKey, session.account_id, method, pathAndQuery);
   } else {
     // Local/demo harness with no wallet: the static key path.
@@ -327,7 +356,7 @@ async function call(
  */
 async function forgetAll(session?: Session): Promise<void> {
   forgetSession();
-  if (session) await dropKey(session.brokerId, session.address);
+  if (session) await dropKey(session.brokerId, session.address, session.chain_id);
 }
 
 export interface TicketProgress {

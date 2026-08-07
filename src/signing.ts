@@ -88,22 +88,61 @@ function toBase64(bytes: ArrayBuffer): string {
   return btoa(s);
 }
 
-/** One keypair per account: two traders in one browser must not share a key. */
-function keyId(brokerId: string, address: string): string {
+/**
+ * One keypair per account **and cluster**: two traders in one browser must not
+ * share a key, and neither may one trader's testnet and mainnet delegations.
+ *
+ * The chain is in here for a reason that is not obvious. An Orderly account id
+ * is `keccak256(wallet, broker)` — no chain in it — so the same wallet has the
+ * *same* id on testnet and mainnet, and a request carries only that id. If both
+ * clusters had registered the same public key, a signature would prove who the
+ * caller is while saying nothing about where they meant to trade, and the
+ * server would be left guessing between two live delegations. Nor can the
+ * request simply say: a header is not covered by the signature, so a captured
+ * request could be replayed with it flipped and a testnet order worked on
+ * mainnet with real money. A distinct key per cluster makes the signature
+ * itself carry the answer — the server tries each delegation and exactly one
+ * verifies.
+ */
+function keyId(brokerId: string, address: string, chainId: number): string {
+  return `${KEY_ID}:${brokerId}:${address.toLowerCase()}:${chainId}`;
+}
+
+/** The id used before keys were per-cluster; read once, to migrate it. */
+function legacyKeyId(brokerId: string, address: string): string {
   return `${KEY_ID}:${brokerId}:${address.toLowerCase()}`;
 }
 
 /**
- * The keypair for this account, generating and storing one the first time.
+ * The keypair for this account on this chain, generating and storing one the
+ * first time.
  *
  * `extractable: false` on the private half is the point of using WebCrypto here
  * at all — a key kept as a string in localStorage could simply be read out and
  * replayed from anywhere.
+ *
+ * A key stored under the old, chain-less id is adopted for whichever cluster
+ * asks first and then **deleted**, so the trader who already onboarded keeps
+ * their delegation instead of being sent back to their wallet. Deleting it is
+ * the point: left in place, the other cluster would adopt the same key next
+ * time and re-create the ambiguity this split exists to remove.
  */
-export async function getOrCreateKey(brokerId: string, address: string): Promise<RequestKey> {
-  const id = keyId(brokerId, address);
+export async function getOrCreateKey(
+  brokerId: string,
+  address: string,
+  chainId: number,
+): Promise<RequestKey> {
+  const id = keyId(brokerId, address, chainId);
   const stored = await idbGet(id).catch(() => undefined);
   if (stored?.privateKey && stored?.publicKey) return stored as RequestKey;
+
+  const legacyId = legacyKeyId(brokerId, address);
+  const legacy = await idbGet(legacyId).catch(() => undefined);
+  if (legacy?.privateKey && legacy?.publicKey) {
+    await idbPut(id, legacy);
+    await idbPut(legacyId, undefined).catch(() => undefined);
+    return legacy as RequestKey;
+  }
 
   const pair = (await crypt().generateKey(ALGORITHM, false, ["sign", "verify"])) as CryptoKeyPair;
   // "raw" is the 65-byte uncompressed SEC1 point the server parses. SPKI would
@@ -114,9 +153,13 @@ export async function getOrCreateKey(brokerId: string, address: string): Promise
   return key;
 }
 
-/** Forget this account's key, so the next call onboards afresh. */
-export async function dropKey(brokerId: string, address: string): Promise<void> {
-  await idbPut(keyId(brokerId, address), undefined).catch(() => undefined);
+/** Forget this account's key on this chain, so the next call onboards afresh. */
+export async function dropKey(
+  brokerId: string,
+  address: string,
+  chainId: number,
+): Promise<void> {
+  await idbPut(keyId(brokerId, address, chainId), undefined).catch(() => undefined);
 }
 
 /** Indexed so these drop straight into a `HeadersInit`. */
