@@ -1,10 +1,10 @@
 /**
- * Blockfill execution module — Orderly Network marketplace plugin.
+ * TWAP execution module — Orderly Network marketplace plugin.
  *
  * A DEX installs this plugin into its `OrderlyAppProvider`:
  *
- *   import { registerBlockfillExec } from "@j1998719/orderly-exec-plugin";
- *   <OrderlyAppProvider plugins={[registerBlockfillExec()]} ... />
+ *   import { registerTwapExec } from "@j1998719/twap-plugin";
+ *   <OrderlyAppProvider plugins={[registerTwapExec()]} ... />
  *
  * TWAP is offered as a custom order type through the SDK's own extension points:
  * the order-type dropdowns accept a non-built-in id, and the host then reports it
@@ -18,13 +18,13 @@
 import * as React from "react";
 import type { OrderlyPlugin } from "@orderly.network/plugin-core";
 
-import { BlockfillOrderPanel } from "./OrderForm.js";
+import { TwapOrderPanel } from "./OrderForm.js";
 import { BotPanel } from "./BotPanel.js";
 import { TWAP_TYPE_ID } from "./mode.js";
 
 /** Id of the data-list tab. Distinct from the order type — the tab holds every
  *  strategy the module offers, of which TWAP is the first. */
-const BOT_TAB_ID = "blockfill-bot";
+const BOT_TAB_ID = "twap-bot";
 
 /** Runtime injector targets (see @orderly.network/ui-order-entry). */
 const ADVANCED_SELECT_TARGET = "Trading.OrderEntry.AdvancedSelect";
@@ -94,17 +94,17 @@ function OrderEntryBody({
   if ((props?.selectedCustomTypeId ?? null) !== TWAP_TYPE_ID) {
     return <Original {...props} />;
   }
-  return <BlockfillOrderPanel symbol={props?.symbol} api={api} />;
+  return <TwapOrderPanel symbol={props?.symbol} api={api} />;
 }
 
 /**
  * Returns the plugin descriptor consumed by `OrderlyAppProvider`'s `plugins` prop.
  * `id` must equal `pluginId` in `.orderly-manifest.json`.
  */
-export function registerBlockfillExec(): OrderlyPlugin {
+export function registerTwapExec(): OrderlyPlugin {
   return {
-    name: "Blockfill Execution",
-    id: "blockfill-exec",
+    name: "TWAP Execution",
+    id: "twap-exec",
     interceptors: [
       {
         target: ADVANCED_SELECT_TARGET,
@@ -145,4 +145,4 @@ export function registerBlockfillExec(): OrderlyPlugin {
   };
 }
 
-export default registerBlockfillExec;
+export default registerTwapExec;

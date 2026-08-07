@@ -1,74 +1,68 @@
-# @j1998719/orderly-exec-plugin
+# @j1998719/twap-plugin
 
-Blockfill execution module for the **Orderly Network Module Marketplace** — a
-DEX-installed plugin that adds a **TWAP / Maker–Taker order-entry panel** and routes
-orders to the blockfill execution engine (smart order execution).
+TWAP algorithmic execution for the **Orderly Network Module Marketplace**.
 
-This is the **frontend (P2)** workstream. It is a **separate TypeScript/React repo**,
-independent of the Rust venue adapter (`blockfill` executor, P1). The full design lives
-in `blockfill/specs/orderly-module.md` (§7 frontend, §11 marketplace).
+Adds a TWAP panel to the order form. Instead of sending the whole order at once,
+it works the order over a duration you choose, slicing it and placing as taker or
+maker. The panel replaces the order-entry body for the TWAP order type and leaves
+every other order type untouched.
 
-## Model
-
-- **Module developer path** (no `broker_id` needed): we publish an npm package; any
-  Orderly DEX installs it into their `OrderlyAppProvider`. End-users install nothing.
-- The custom order form is injected at the `Trading.OrderEntry.SubmitSection`
-  interceptor target.
-
-## How a DEX installs it
+## Install
 
 ```tsx
-import { registerBlockfillExec } from "@j1998719/orderly-exec-plugin";
+import { registerTwapExec } from "@j1998719/twap-plugin";
 
-<OrderlyAppProvider brokerId="…" plugins={[registerBlockfillExec()]}>
+<OrderlyAppProvider brokerId="…" plugins={[registerTwapExec()]}>
   …
 </OrderlyAppProvider>
 ```
 
-Config (host page): `globalThis.BLOCKFILL_SERVER_URL` → blockfill-server endpoint.
+Set the backend endpoint on the host page:
 
-## Data flow
-
-```
-order form (this plugin)  ──POST placeTicket──▶  blockfill-server (Execution mode)
-                                                      │ mongo changestream
-                                                      ▼
-                                                blockfill executor ──▶ Orderly Network
+```ts
+globalThis.TWAP_SERVER_URL = "https://…";
 ```
 
-## Structure
+Or `""` to send relative paths, when something in front of your app already
+forwards `/execution` to the backend — same origin means no CORS and no mixed
+content.
 
-| File | Purpose |
-|------|---------|
-| `src/plugin.tsx` | `registerBlockfillExec()` — the interceptor descriptor |
-| `src/OrderForm.tsx` | `BlockfillOrderPanel` — the TWAP/Maker order form (the design sketch) |
-| `src/api.ts` | `placeTicket()` — blockfill-server client |
-| `.orderly-manifest.json` | marketplace submission manifest |
+## Supported markets
 
-## Build
+| Symbol | Supported |
+|---|---|
+| `PERP_ETH_USDC` — shared market | ✅ |
+| `PERP_ETH_USDC_<broker>` — broker-exclusive | ❌ |
+
+Broker-exclusive markets are not supported. On one, the panel says so and names
+the market rather than rendering a form that would fail later.
+
+## How a request proves who it is
+
+The browser generates an ECDSA P-256 keypair the first time you enable TWAP. Its
+public half is bound to your account at the moment Orderly confirms your wallet
+signed `AddOrderlyKey`; every later request carries a signature over that exact
+call. Nothing reusable crosses the network — a captured request yields a
+signature for one call at one instant.
+
+The private key lives in IndexedDB as a non-extractable `CryptoKey`: script on
+the page can ask it to sign but cannot read it out. Clearing site data or moving
+to another browser means onboarding again.
+
+## Layout
+
+| File | What it is |
+|---|---|
+| `src/plugin.tsx` | `registerTwapExec()` — the interceptor descriptor |
+| `src/OrderForm.tsx` | `TwapOrderPanel` — the TWAP order form |
+| `src/api.ts` | the backend client |
+| `src/signing.ts` | keypair generation, storage and request signing |
+| `src/mode.ts` | the TWAP order-type id |
+
+## Development
 
 ```bash
-npm install --legacy-peer-deps   # Orderly SDK pulls react-dom@19 as a transitive peer
-npm run build                    # tsc → dist/
+npm install
+npm run build      # tsc → dist/
+npm pack           # inspect the tarball before publishing
 ```
-
-## Status / TODO
-
-- [x] Typed against the real `@orderly.network/plugin-core` `OrderlyPlugin` type;
-      `npm run build` produces `dist/` cleanly (interceptor `(Original, props, api)`
-      shape confirmed against SDK v3.1.5).
-- [x] Wire live symbol/position/holding from `@orderly.network/hooks`
-      (`usePositionStream` → current `position_qty` for the symbol; `useCollateral` →
-      free collateral for "Available"). `target_position` is now computed off the real
-      starting position, not a flat assumption. (Type-checked against SDK v3.1.5;
-      pending live verification in a host DEX.)
-- [x] Replace the static `X-API-Key` with a per-account **bearer token**, issued by
-      `POST /execution/v1/onboard/complete` alongside the delegated key — that is
-      where Orderly has just verified the trader's `AddOrderlyKey` signature, so it
-      is the one point where we know who is calling. The spec's separate SIWE
-      challenge/session step (§7) was dropped: it spent a second wallet signature
-      establishing what the delegation establishes anyway.
-- [ ] Add `strategy` (Maker/Taker) to the server ticket schema (spec §5), or map it to a
-      strategy config on the executor.
-- [ ] Preview live in a host DEX (`OrderlyAppProvider plugins={[registerBlockfillExec()]}`)
-      on testnet; est. liq price / fees wiring.

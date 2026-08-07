@@ -1,5 +1,5 @@
 /**
- * Client for the blockfill execution backend (blockfill-server, Execution mode).
+ * Client for the smart-execution backend that runs the TWAP algorithm.
  *
  * # How a request proves who it is
  *
@@ -29,7 +29,7 @@
 import { getOrCreateKey, dropKey, signRequest, type RequestKey } from "./signing.js";
 
 /**
- * Base URL to prefix every request with, from `globalThis.BLOCKFILL_SERVER_URL`.
+ * Base URL to prefix every request with, from `globalThis.TWAP_SERVER_URL`.
  * Resolved at CALL time, because the host page sets the global after this module
  * is imported.
  *
@@ -42,20 +42,20 @@ import { getOrCreateKey, dropKey, signRequest, type RequestKey } from "./signing
  *   testing pass in a configuration that would be blocked anywhere real.
  * - **An empty string** — send relative paths, so the requests go to the DEX's
  *   own origin and something in front (a reverse proxy, or Vite's `proxy` in
- *   dev) forwards `/execution` to blockfill-server. This is a deliberate
+ *   dev) forwards `/execution` to the execution backend. This is a deliberate
  *   setting, not a missing one, and it is the tidiest deployment there is:
  *   same-origin means no mixed content and no CORS.
  * - **Unset** — an error. The default here used to be
- *   `https://exec.blockfill.example`; `.example` is reserved by RFC 2606 and can
+ *   `https://exec.example.com`; `.example.com` is reserved by RFC 2606 and can
  *   never resolve, so forgetting to configure this produced a DNS failure naming
  *   a domain that does not exist, rather than saying what was not set.
  */
-function blockfillServerUrl(): string {
-  const url = (globalThis as any).BLOCKFILL_SERVER_URL;
+function twapServerUrl(): string {
+  const url = (globalThis as any).TWAP_SERVER_URL;
   if (url === undefined || url === null) {
     throw new Error(
-      "BLOCKFILL_SERVER_URL is not set — the host page must set " +
-        "globalThis.BLOCKFILL_SERVER_URL to the blockfill-server endpoint " +
+      "TWAP_SERVER_URL is not set — the host page must set " +
+        "globalThis.TWAP_SERVER_URL to the execution backend endpoint " +
         "(https://…), or to \"\" if /execution is proxied from this origin",
     );
   }
@@ -97,9 +97,14 @@ function sessionKey(brokerId: string, address: string): string {
  * In memory alone they did not: a TWAP keeps working server-side while the tab
  * is closed, so after a refresh the trader still has live orders — but with an
  * empty cache every read-only call went out unauthenticated and the history
- * came back empty, which reads as "you have no orders". The token is a
- * short-lived Bearer scoped to one account, the same class of secret the SDK
- * already keeps there for its own trading key.
+ * came back empty, which reads as "you have no orders".
+ *
+ * What is stored is not a credential: account id, broker, address and expiry.
+ * The secret that authenticates a request never leaves IndexedDB, and is not
+ * readable by script even there (see `./signing`).
+ *
+ * The prefix keeps its original name through the rename to twap-plugin, for the
+ * same reason `DB_NAME` does — a session pointing at a signing key must find it.
  */
 const SESSION_STORE_PREFIX = "blockfill.session.";
 
@@ -238,7 +243,7 @@ export async function authorize(
   const cached = peekSession(brokerId, address);
   if (cached) return cached;
 
-  const base = blockfillServerUrl();
+  const base = twapServerUrl();
   const json = { "Content-Type": "application/json" };
   const requestKey = await getOrCreateKey(brokerId, address);
 
@@ -305,12 +310,12 @@ async function call(
     headers = await signRequest(requestKey, session.account_id, method, pathAndQuery);
   } else {
     // Local/demo harness with no wallet: the static key path.
-    const apiKey = (globalThis as any).BLOCKFILL_SESSION_TOKEN ?? "";
-    const user = (globalThis as any).BLOCKFILL_USER_ID ?? "";
+    const apiKey = (globalThis as any).TWAP_SESSION_TOKEN ?? "";
+    const user = (globalThis as any).TWAP_USER_ID ?? "";
     if (!apiKey || !user) throw new NotSignedInError();
     headers = { "X-API-Key": apiKey, "X-User-Id": user };
   }
-  return await fetch(`${blockfillServerUrl()}${pathAndQuery}`, { method, headers });
+  return await fetch(`${twapServerUrl()}${pathAndQuery}`, { method, headers });
 }
 
 /**

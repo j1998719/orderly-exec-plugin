@@ -1,5 +1,5 @@
 /**
- * Blockfill TWAP order form — rendered in place of the host's order-entry body
+ * TWAP order form — rendered in place of the host's order-entry body
  * when the trader picks our TWAP order type.
  *
  * It follows the host's own layout (side, available, size, then the order's own
@@ -79,7 +79,7 @@ function isSupportedMarket(symbol: string): boolean {
   return parts.length === 3 && parts[0].toUpperCase() === "PERP";
 }
 
-export function BlockfillOrderPanel({ symbol, api }: { symbol?: string; api?: any }) {
+export function TwapOrderPanel({ symbol, api }: { symbol?: string; api?: any }) {
   const { base, quote } = splitSymbol(symbol);
 
   const [timeoutMs, setTimeoutMs] = React.useState<number>(TIMEOUT_PRESETS[1].ms);

@@ -1,7 +1,7 @@
 {
-  "name": "@j1998719/orderly-exec-plugin",
-  "version": "0.10.3",
-  "description": "Blockfill execution module for Orderly Network — TWAP/Maker order entry that routes to the blockfill execution engine.",
+  "name": "@j1998719/twap-plugin",
+  "version": "0.11.0",
+  "description": "TWAP algorithmic execution for Orderly Network \u2014 taker and maker order entry with scheduled slicing. Shared markets only; broker-exclusive markets are not supported.",
   "type": "module",
   "main": "dist/plugin.js",
   "module": "dist/plugin.js",
@@ -29,5 +29,22 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.5.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/j1998719/twap-plugin.git"
+  },
+  "homepage": "https://github.com/j1998719/twap-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/j1998719/twap-plugin/issues"
+  },
+  "keywords": [
+    "orderly",
+    "orderly-network",
+    "twap",
+    "algorithmic-execution",
+    "trading",
+    "defi",
+    "perpetuals"
+  ]
 }

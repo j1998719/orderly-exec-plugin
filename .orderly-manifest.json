@@ -1,9 +1,13 @@
 {
-  "npmName": "@j1998719/orderly-exec-plugin",
-  "pluginId": "blockfill-exec",
-  "repoUrl": "https://github.com/j1998719/orderly-exec-plugin",
-  "tags": ["Order Entry", "Trading", "Tool"],
-  "usagePrompt": "Blockfill execution module. Adds a TWAP / Maker-Taker order-entry panel to the order form that routes orders to the blockfill execution engine (smart order execution over Orderly). Install: add this package to your app and pass registerBlockfillExec() to OrderlyAppProvider's `plugins` prop. Config: set globalThis.BLOCKFILL_SERVER_URL to the blockfill-server endpoint; the plugin auto-detects the active symbol and account from the Orderly SDK context. No broker configuration required.",
+  "npmName": "@j1998719/twap-plugin",
+  "pluginId": "twap-exec",
+  "repoUrl": "https://github.com/j1998719/twap-plugin",
+  "tags": [
+    "Order Entry",
+    "Trading",
+    "Tool"
+  ],
+  "usagePrompt": "TWAP algorithmic execution. Adds a TWAP panel to the order form that works the order over a chosen duration with taker or maker placement, instead of sending it all at once. Install: add this package to your app and pass registerTwapExec() to OrderlyAppProvider's `plugins` prop. Config: set globalThis.TWAP_SERVER_URL to the execution backend endpoint. The plugin auto-detects the active symbol and account from the Orderly SDK context; no broker configuration is required. Supported on shared markets (PERP_<BASE>_USDC); broker-exclusive markets are not supported and the panel says so in place of the form.",
   "coverImages": [],
   "storybookUrl": "",
   "storybookTooltip": ""

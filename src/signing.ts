@@ -23,6 +23,12 @@
  * means onboarding again.
  */
 
+// Keeps its original name through the rename to twap-plugin, deliberately.
+// This database holds the non-extractable signing key; renaming it orphans the
+// key every existing browser holds and forces everyone to onboard again. That
+// costs more than a tidy string — `remove_orderly_key` is a verified no-op on
+// Orderly, so each re-onboard leaves the previous delegated key usable until it
+// expires 30 days later.
 const DB_NAME = "blockfill";
 const STORE = "keys";
 const KEY_ID = "request-signing-key";
